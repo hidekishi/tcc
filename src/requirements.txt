@@ -1,0 +1,22 @@
+# Requirements for OpenMP Benchmark Suite Runner
+# This file is for documentation purposes - the main dependencies
+# are system packages that will be installed via apt
+
+# Python standard library modules used:
+# - os, sys, subprocess, shutil, csv, json, time, datetime, pathlib
+# - typing, argparse, logging, re
+
+# System dependencies (installed via apt):
+# - build-essential
+# - gcc 
+# - g++
+# - gfortran
+# - libomp-dev
+# - make
+# - git
+# - time
+
+# Optional Python packages for enhanced analysis (can be installed with pip):
+numpy>=1.19.0
+pandas>=1.3.0
+matplotlib>=3.3.0
