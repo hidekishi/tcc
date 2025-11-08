@@ -179,8 +179,8 @@ int main(int argc, char **argv){
     printf("-> %d, %d, %g, %g, %g, %d\n",
            n, m, alpha, relax, tol, mits);
     
-    u = (double *) OSCR_malloc(n*m*sizeof(double));
-    f = (double *) OSCR_malloc(n*m*sizeof(double));
+    u = (double *) OSCR_calloc(n*m, sizeof(double));
+    f = (double *) OSCR_calloc(n*m, sizeof(double));
 
 
     /* arrays are allocated and initialzed */
@@ -242,7 +242,7 @@ void jacobi ( const int n, const int m, double dx, double dy, double alpha,
 	 getauscht, zB uold[spalten_num][zeilen_num]; bzw. wir tuen so, als ob wir das
 	 gespiegelte Problem loesen wollen */
 
-  uold = (double *)OSCR_malloc(sizeof(double) * n *m);
+  uold = (double *)OSCR_calloc(n * m, sizeof(double));
 
 
 
@@ -266,6 +266,7 @@ void jacobi ( const int n, const int m, double dx, double dy, double alpha,
 
 	  /* compute stencil, residual and update */
 #pragma omp for reduction(+:error)
+	  for (j=1; j<m-1; j++)
 		for (i=1; i<n-1; i++){
 		  resid =(
 				  ax * (uold[i-1 + m*j] + uold[i+1 + m*j])
@@ -279,8 +280,7 @@ void jacobi ( const int n, const int m, double dx, double dy, double alpha,
 		  /* accumulate residual error */
 		  error =error + resid*resid;
 
-		
-		} /* end for */
+		} /* end for i */
 
 	  /* error check */
 #pragma omp master
@@ -288,13 +288,13 @@ void jacobi ( const int n, const int m, double dx, double dy, double alpha,
 		k++;
 		error = sqrt(error) /(n*m);
 	  }
+#pragma omp barrier
 
 	} /* while */
-	
 
   } /* end parallel */
 
-  printf("Total Number of Iteratuons %d\n", k);
+  printf("Total Number of Iterations %d\n", k);
   printf("Residual                   %.15f\n", error);
 
   free(uold);

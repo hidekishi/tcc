@@ -179,8 +179,8 @@ int main(int argc, char **argv){
     printf("-> %d, %d, %g, %g, %g, %d\n",
            n, m, alpha, relax, tol, mits);
     
-    u = (double *) OSCR_malloc(n*m*sizeof(double));
-    f = (double *) OSCR_malloc(n*m*sizeof(double));
+    u = (double *) OSCR_calloc(n*m, sizeof(double));
+    f = (double *) OSCR_calloc(n*m, sizeof(double));
 
 
     /* arrays are allocated and initialzed */
@@ -242,7 +242,7 @@ void jacobi ( const int n, const int m, double dx, double dy, double alpha,
 	 getauscht, zB uold[spalten_num][zeilen_num]; bzw. wir tuen so, als ob wir das
 	 gespiegelte Problem loesen wollen */
 
-  uold = (double *)OSCR_malloc(sizeof(double) * n *m);
+  uold = (double *)OSCR_calloc(n * m, sizeof(double));
 
 
 

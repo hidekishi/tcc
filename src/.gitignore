@@ -1,5 +1,33 @@
-results
-*.log
-*.out
+# Build and compiled files
 *.o
 *.mod
+*.exe
+*.par.gnu
+
+# Results and logs
+results/
+benchmark_results/
+analysis_output/
+*.log
+*.out
+
+# Temporary and backup files
+*~
+*.tmp
+*.bak
+*_backup.py
+*_old.py
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Progress and monitoring files
+progress_*.json
+intermediate_results_*.json
+
+# Generated scripts
+benchmark_comprehensive.log
+nohup.out

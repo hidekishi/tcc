@@ -1,0 +1,50 @@
+# Build and compiled files
+*.o
+*.mod
+*.exe
+*.par.gnu
+
+# Results and benchmark data
+src/benchmark_results/
+src/analysis_output/
+src/results/
+
+# Logs and temporary files
+*.log
+*.out
+nohup.out
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Backup and temporary files
+*~
+*.tmp
+*.bak
+*_backup.*
+*_old.*
+
+# Generated executables
+src/bin/*.par.gnu
+
+# Progress and monitoring files
+src/progress_*.json
+src/intermediate_results_*.json
+
+# Generated scripts and documentation
+src/benchmark_comprehensive.log
+src/BENCHMARK_README.md
+src/USAGE_GUIDE.md
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# System files
+.DS_Store
+Thumbs.db

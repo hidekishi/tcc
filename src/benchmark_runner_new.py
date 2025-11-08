@@ -20,14 +20,11 @@ class BenchmarkRunner:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
         
-        # Problem sizes: tiny, small, medium, large, huge, extreme
+        # Problem sizes: small, medium, large
         self.problem_sizes = {
-            'tiny': {'grid_size': 25, 'iterations': 10, 'array_size': 1000, 'fft_size': 512},
-            'small': {'grid_size': 50, 'iterations': 25, 'array_size': 5000, 'fft_size': 1024},
-            'medium': {'grid_size': 200, 'iterations': 100, 'array_size': 25000, 'fft_size': 2048}, 
-            'large': {'grid_size': 500, 'iterations': 200, 'array_size': 100000, 'fft_size': 4096},
-            'huge': {'grid_size': 1000, 'iterations': 300, 'array_size': 500000, 'fft_size': 8192},
-            'extreme': {'grid_size': 2000, 'iterations': 500, 'array_size': 1000000, 'fft_size': 16384}
+            'small': {'grid_size': 50, 'iterations': 25},
+            'medium': {'grid_size': 200, 'iterations': 100}, 
+            'large': {'grid_size': 500, 'iterations': 200}
         }
         
         # Results storage
@@ -49,84 +46,63 @@ class BenchmarkRunner:
             'c_pi': {
                 'binary': 'bin/c_pi.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
                     'small': ['-test'],
                     'medium': ['-test'], 
-                    'large': ['-test'],
-                    'huge': ['-test'],
-                    'extreme': ['-test']
+                    'large': ['-test']
                 },
                 'description': 'Pi calculation using numerical integration'
             },
             'c_mandel': {
                 'binary': 'bin/c_mandel.par.gnu', 
                 'args_template': {
-                    'tiny': ['-test'],
                     'small': ['-test'],
                     'medium': ['-test'],
-                    'large': ['-test'],
-                    'huge': ['-test'],
-                    'extreme': ['-test']
+                    'large': ['-test']
                 },
                 'description': 'Mandelbrot set generator'
             },
             'c_qsort': {
                 'binary': 'bin/c_qsort.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
                     'small': ['-test'],
                     'medium': ['-test'],
-                    'large': ['-test'],
-                    'huge': ['-test'],
-                    'extreme': ['-test']
+                    'large': ['-test']
                 },
                 'description': 'Parallel quicksort'
             },
             'c_fft': {
                 'binary': 'bin/c_fft.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
                     'small': ['-test'],
                     'medium': ['-test'],
-                    'large': ['-test'],
-                    'huge': ['-test'],
-                    'extreme': ['-test']
+                    'large': ['-test']
                 },
                 'description': 'Fast Fourier Transform'
             },
             'c_fft6': {
                 'binary': 'bin/c_fft6.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
                     'small': ['-test'],
                     'medium': ['-test'],
-                    'large': ['-test'],
-                    'huge': ['-test'],
-                    'extreme': ['-test']
+                    'large': ['-test']
                 },
                 'description': '6-point FFT implementation'
             },
             'c_md': {
                 'binary': 'bin/c_md.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
                     'small': ['-test'],
                     'medium': ['-test'],
-                    'large': ['-test'],
-                    'huge': ['-test'],
-                    'extreme': ['-test']
+                    'large': ['-test']
                 },
                 'description': 'Molecular Dynamics simulation'
             },
             'c_lu': {
                 'binary': 'bin/c_lu.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
                     'small': ['-test'],
                     'medium': ['-test'],
-                    'large': ['-test'],
-                    'huge': ['-test'],
-                    'extreme': ['-test']
+                    'large': ['-test']
                 },
                 'description': 'LU decomposition'
             },
@@ -135,36 +111,27 @@ class BenchmarkRunner:
             'c_jacobi01': {
                 'binary': 'bin/c_jacobi01.par.gnu',
                 'args_template': {
-                    'tiny': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
                     'small': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
                     'medium': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
-                    'large': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
-                    'huge': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
-                    'extreme': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}']
+                    'large': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}']
                 },
                 'description': 'Jacobi iterative solver v1'
             },
             'c_jacobi02': {
                 'binary': 'bin/c_jacobi02.par.gnu',
                 'args_template': {
-                    'tiny': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
                     'small': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
                     'medium': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
-                    'large': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
-                    'huge': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
-                    'extreme': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}']
+                    'large': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}']
                 },
                 'description': 'Jacobi iterative solver v2'
             },
             'c_jacobi03': {
                 'binary': 'bin/c_jacobi03.par.gnu',
                 'args_template': {
-                    'tiny': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
                     'small': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
                     'medium': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
-                    'large': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
-                    'huge': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
-                    'extreme': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}']
+                    'large': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}']
                 },
                 'description': 'Jacobi iterative solver v3'
             },
@@ -173,48 +140,36 @@ class BenchmarkRunner:
             'c_loopA_sol1': {
                 'binary': 'bin/c_loopA.solution1.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
                     'small': ['-test'],
                     'medium': ['-test'],
-                    'large': ['-test'],
-                    'huge': ['-test'],
-                    'extreme': ['-test']
+                    'large': ['-test']
                 },
                 'description': 'Loop A dependency - Solution 1'
             },
             'c_loopA_sol2': {
                 'binary': 'bin/c_loopA.solution2.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
                     'small': ['-test'],
                     'medium': ['-test'],
-                    'large': ['-test'],
-                    'huge': ['-test'],
-                    'extreme': ['-test']
+                    'large': ['-test']
                 },
                 'description': 'Loop A dependency - Solution 2'
             },
             'c_loopA_sol3': {
                 'binary': 'bin/c_loopA.solution3.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
                     'small': ['-test'],
                     'medium': ['-test'],
-                    'large': ['-test'],
-                    'huge': ['-test'],
-                    'extreme': ['-test']
+                    'large': ['-test']
                 },
                 'description': 'Loop A dependency - Solution 3'
             },
             'c_loopB_pipeline': {
                 'binary': 'bin/c_loopB.pipelineSolution.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
                     'small': ['-test'],
                     'medium': ['-test'],
-                    'large': ['-test'],
-                    'huge': ['-test'],
-                    'extreme': ['-test']
+                    'large': ['-test']
                 },
                 'description': 'Loop B dependency - Pipeline Solution'
             },
@@ -223,36 +178,27 @@ class BenchmarkRunner:
             'c_loopA_bad': {
                 'binary': 'bin/c_loopA.badSolution.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
                     'small': ['-test'],
                     'medium': ['-test'],
-                    'large': ['-test'],
-                    'huge': ['-test'],
-                    'extreme': ['-test']
+                    'large': ['-test']
                 },
                 'description': 'Loop A dependency - Bad Solution (has races)'
             },
             'c_loopB_bad1': {
                 'binary': 'bin/c_loopB.badSolution1.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
                     'small': ['-test'],
                     'medium': ['-test'],
-                    'large': ['-test'],
-                    'huge': ['-test'],
-                    'extreme': ['-test']
+                    'large': ['-test']
                 },
                 'description': 'Loop B dependency - Bad Solution 1 (has races)'
             },
             'c_loopB_bad2': {
                 'binary': 'bin/c_loopB.badSolution2.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
                     'small': ['-test'],
                     'medium': ['-test'],
-                    'large': ['-test'],
-                    'huge': ['-test'],
-                    'extreme': ['-test']
+                    'large': ['-test']
                 },
                 'description': 'Loop B dependency - Bad Solution 2 (has races)'
             }
@@ -277,10 +223,6 @@ class BenchmarkRunner:
                 args.append(arg.format(grid_size=size_config['grid_size']))
             elif '{iterations}' in arg:
                 args.append(arg.format(iterations=size_config['iterations']))
-            elif '{array_size}' in arg:
-                args.append(arg.format(array_size=size_config['array_size']))
-            elif '{fft_size}' in arg:
-                args.append(arg.format(fft_size=size_config['fft_size']))
             else:
                 args.append(arg)
         
@@ -477,7 +419,7 @@ class BenchmarkRunner:
             benchmarks = list(self.benchmarks.keys())
         
         if problem_sizes is None:
-            problem_sizes = ['tiny', 'small', 'medium', 'large', 'huge', 'extreme']
+            problem_sizes = ['small', 'medium', 'large']
         
         # Filter benchmarks to only include available ones
         available_benchmarks = []
@@ -636,18 +578,14 @@ def main():
                         help='Number of iterations per configuration (default: 3)')
     parser.add_argument('--benchmarks', type=str, default='all',
                         help='Comma-separated list of benchmarks or "all" (default: all)')
-    parser.add_argument('--problem-sizes', type=str, default='tiny,small,medium,large,huge,extreme',
-                        help='Comma-separated list of problem sizes: tiny,small,medium,large,huge,extreme (default: all)')
+    parser.add_argument('--problem-sizes', type=str, default='small,medium,large',
+                        help='Comma-separated list of problem sizes: small,medium,large (default: all)')
     parser.add_argument('--output', type=str, default='benchmark_results',
                         help='Output directory (default: benchmark_results)')
     parser.add_argument('--list', action='store_true',
                         help='List available benchmarks and exit')
     parser.add_argument('--full-test', action='store_true',
                         help='Run comprehensive test with 1,2,4,8,12,16,24 threads, all sizes, 10 iterations')
-    parser.add_argument('--quick-test', action='store_true',
-                        help='Run quick test with 1,2,4 threads, tiny,small,medium sizes, 3 iterations')
-    parser.add_argument('--stress-test', action='store_true',
-                        help='Run stress test with 1,2,4,8,16,24,32 threads, all sizes including extreme, 15 iterations')
     
     args = parser.parse_args()
     
@@ -660,49 +598,22 @@ def main():
             status = "✓" if runner.check_binary_exists(config['binary']) else "✗"
             print(f"{status} {name:20}: {config['description']}")
         print("\nProblem sizes:")
-        print("=" * 40)
+        print("=" * 30)
         for size, config in runner.problem_sizes.items():
-            print(f"• {size:8}: grid={config['grid_size']:4d}, iter={config['iterations']:3d}, array={config['array_size']:7d}, fft={config['fft_size']:5d}")
+            print(f"• {size:8}: grid={config['grid_size']:3d}, iterations={config['iterations']:3d}")
         return
     
-    # Handle test modes
+    # Handle full test mode
     if args.full_test:
         thread_counts = [1, 2, 4, 8, 12, 16, 24]
         iterations = 10
         benchmarks = None  # All benchmarks
-        problem_sizes = ['tiny', 'small', 'medium', 'large', 'huge', 'extreme']
+        problem_sizes = ['small', 'medium', 'large']
         print("🔬 Running FULL COMPREHENSIVE TEST")
         print(f"   Threads: {thread_counts}")
         print(f"   Sizes: {problem_sizes}")
         print(f"   Iterations: {iterations}")
-        total_configs = len(runner.benchmarks) * len(thread_counts) * len(problem_sizes) * iterations
-        print(f"   Total runs: {total_configs}")
-        print("💡 Use 'python3 monitor_progress.py' in another terminal to monitor progress")
-        print("")
-    elif args.quick_test:
-        thread_counts = [1, 2, 4]
-        iterations = 3
-        benchmarks = None  # All benchmarks
-        problem_sizes = ['tiny', 'small', 'medium']
-        print("⚡ Running QUICK TEST")
-        print(f"   Threads: {thread_counts}")
-        print(f"   Sizes: {problem_sizes}")
-        print(f"   Iterations: {iterations}")
-        total_configs = len(runner.benchmarks) * len(thread_counts) * len(problem_sizes) * iterations
-        print(f"   Total runs: {total_configs}")
-        print("")
-    elif args.stress_test:
-        thread_counts = [1, 2, 4, 8, 16, 24, 32]
-        iterations = 15
-        benchmarks = None  # All benchmarks
-        problem_sizes = ['tiny', 'small', 'medium', 'large', 'huge', 'extreme']
-        print("💪 Running STRESS TEST")
-        print(f"   Threads: {thread_counts}")
-        print(f"   Sizes: {problem_sizes}")
-        print(f"   Iterations: {iterations}")
-        total_configs = len(runner.benchmarks) * len(thread_counts) * len(problem_sizes) * iterations
-        print(f"   Total runs: {total_configs}")
-        print("⚠️  WARNING: This test can take many hours to complete!")
+        print(f"   Total runs: {len(runner.benchmarks) * len(thread_counts) * len(problem_sizes) * iterations}")
         print("💡 Use 'python3 monitor_progress.py' in another terminal to monitor progress")
         print("")
     else:

@@ -14,7 +14,7 @@
 #
 # SECTION 1: C COMPILER
 #
-TOOL=llov
+TOOL=gnu
 
 #
 # 1.1. C compiler activation
@@ -26,7 +26,7 @@ OSCR_USE_C=y
 #
 # 1.2. The name of your C compiler or front-end
 #
-OSCR_CC=/home/utpal/LLVMOmpVerify/build/bin/clang -Xclang -load -Xclang /home/utpal/LLVMOmpVerify/build/lib/OpenMPVerify.so
+OSCR_CC=gcc
 
 #
 # 1.3. Flag/s needed to activate OpenMP pragmas recognition
@@ -42,12 +42,12 @@ OSCR_C_OMPSTUBSFLAG=
 # 1.5. (Optional)
 #	Flags to obtain some report or information about the parallelization
 #
-OSCR_C_REPORT=-Xclang -disable-O0-optnone -mllvm -polly-process-unprofitable -mllvm -polly-invariant-load-hoisting -mllvm -polly-ignore-parameter-bounds -mllvm -polly-dependences-on-demand
+OSCR_C_REPORT=
 
 #
 # 1.6. (Optional) Other common flags (e.g. optimization)
 #
-OSCR_C_OTHERS=
+OSCR_C_OTHERS=-g -std=c99
 
 
 
@@ -66,7 +66,7 @@ OSCR_USE_CPP=y
 #
 # 2.2. The name of your C++ compiler or front-end
 #
-OSCR_CPPC=/home/utpal/LLVMOmpVerify/build/bin/clang++ -Xclang -load -Xclang /home/utpal/LLVMOmpVerify/build/lib/OpenMPVerify.so
+OSCR_CPPC=g++
 
 #
 # 2.3. Flag/s needed to activate OpenMP pragmas recognition
@@ -82,12 +82,12 @@ OSCR_CPP_OMPSTUBSFLAG=
 # 2.5. (Optional)
 #	Flags to obtain some report or information about the parallelization
 #
-OSCR_CPP_REPORT=-Xclang -disable-O0-optnone -mllvm -polly-process-unprofitable -mllvm -polly-invariant-load-hoisting -mllvm -polly-ignore-parameter-bounds -mllvm -polly-dependences-on-demand
+OSCR_CPP_REPORT=
 
 #
 # 2.6. (Optional) Other common flags (e.g. optimization)
 #
-OSCR_CPP_OTHERS=
+OSCR_CPP_OTHERS=-g
 
 
 ########################################
@@ -105,7 +105,7 @@ OSCR_USE_F=n
 #
 # 3.2. The name of your Frotran90/95 compiler or front-end
 #
-OSCR_FF=flang
+OSCR_FF=gfortran
 
 #
 # 3.3. Flag/s needed to activate OpenMP pragmas recognition
@@ -121,12 +121,12 @@ OSCR_F_OMPSTUBSFLAG=
 # 3.5. (Optional)
 #	Flags to obtain some report or information about the parallelization
 #
-OSCR_F_REPORT=-Xclang -disable-O0-optnone -mllvm -polly-process-unprofitable -mllvm -polly-invariant-load-hoisting -mllvm -polly-ignore-parameter-bounds -mllvm -polly-dependences-on-demand
+OSCR_F_REPORT=
 
 #
 # 3.6. (Optional) Other common flags (e.g. optimization)
 #
-OSCR_F_OTHERS=
+OSCR_F_OTHERS=-g
 
 
 
