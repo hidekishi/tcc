@@ -16,7 +16,6 @@ Sistema automatizado para execução e análise de benchmarks OpenMP com anális
 - **`IMPLEMENTACAO_COMPLETA.md`** - Documentação detalhada das funcionalidades
 - **`BENCHMARK_README.md`** - Guia específico dos benchmarks
 - **`USAGE_GUIDE.md`** - Guia de uso completo
-- **`INTEGRITY_VERIFICATION.md`** - Guia completo da verificação de integridade
 
 ## ⚡ Uso Rápido
 
@@ -44,11 +43,10 @@ python3 monitor_progress.py
 
 - ✅ **Execução automatizada** de 17 benchmarks OpenMP
 - ✅ **Análise automática pós-execução** com gráficos e relatórios
-- ✅ **Verificação de integridade** dos resultados entre configurações
 - ✅ **9 níveis de tamanho** de problema (tiny → gigantic)
 - ✅ **Monitoramento em tempo real** do progresso
 - ✅ **Relatórios detalhados** de speedup e eficiência paralela
-- ✅ **Interface unificada** para execução + análise + verificação
+- ✅ **Interface unificada** para execução + análise
 
 ## 🔧 Configuração e Instalação
 
@@ -78,20 +76,19 @@ src/
 └── doc/                  # Documentação técnica
 ```
 
-## 📈 Tamanhos de Problema Otimizados
+## 📈 Tamanhos de Problema Disponíveis
 
-| Tamanho   | Grid      | Iterações | Array      | FFT     | Uso de Memória |
-|-----------|-----------|-----------|------------|---------|----------------|
-| small     | 512x512   | 100       | 100K       | 2K      | ~2 MB          |
-| medium    | 2Kx2K     | 500       | 1M         | 8K      | ~16 MB         |
-| large     | 4Kx4K     | 1000      | 4M         | 32K     | ~64 MB         |
-| huge      | 8Kx8K     | 2000      | 16M        | 128K    | ~256 MB        |
-| extreme   | 16Kx16K   | 4000      | 64M        | 512K    | ~1 GB          |
-
-**Reorganização otimizada:**
-- **5 tamanhos distintivos** (reduzido de 9) para eliminar redundância
-- **Progressão exponencial** (~4x entre níveis) para melhor análise
-- **Foco em escalabilidade** - problemas grandes revelam gargalos reais
+| Tamanho   | Grid     | Iterações | Array      | FFT    | Uso de Memória |
+|-----------|----------|-----------|------------|--------|----------------|
+| tiny      | 25x25    | 10        | 1K         | 512    | ~0.01 MB       |
+| small     | 100x100  | 50        | 10K        | 1K     | ~0.1 MB        |
+| medium    | 300x300  | 150       | 50K        | 2K     | ~0.4 MB        |
+| large     | 750x750  | 300       | 200K       | 4K     | ~1.6 MB        |
+| huge      | 1.5Kx1.5K| 500       | 800K       | 8K     | ~6.4 MB        |
+| extreme   | 3Kx3K    | 750       | 2M         | 16K    | ~16 MB         |
+| massive   | 5Kx5K    | 1000      | 5M         | 32K    | ~40 MB         |
+| colossal  | 8Kx8K    | 1500      | 10M        | 64K    | ~80 MB         |
+| gigantic  | 12Kx12K  | 2000      | 20M        | 128K   | ~160 MB        |
 
 ## 🎯 Benchmarks Disponíveis (17 total)
 
@@ -107,15 +104,3 @@ src/
 - **c_loopA_bad, c_loopB_bad1/2** - Implementações com race conditions
 
 Para documentação completa, consulte os arquivos markdown de documentação.
-
-### Verificação de Integridade dos Resultados
-```bash
-# Verificação básica
-python3 benchmark_runner.py --check-integrity
-
-# Com threshold personalizado
-python3 benchmark_runner.py --check-integrity --integrity-threshold 0.05
-
-# Combinando com análise completa
-python3 benchmark_runner.py --full-test --check-integrity --auto-analyze
-```

@@ -1,0 +1,29 @@
+OmpSCR Benchmark Analysis - Detailed Report
+==================================================
+
+Generated: 2025-11-11 19:14:33
+Total successful runs: 6
+Benchmarks analyzed: 1
+Thread counts tested: [1, 2, 4, 8, 16, 24]
+
+PERFORMANCE SUMMARY:
+------------------------------
+Benchmark            Threads  Avg Time   Std Dev    Min Time   Max Time  
+--------------------------------------------------------------------------------
+c_pi                 1        0.003      nan        0.003      0.003     
+c_pi                 2        0.003      nan        0.003      0.003     
+c_pi                 4        0.002      nan        0.002      0.002     
+c_pi                 8        0.002      nan        0.002      0.002     
+c_pi                 16       0.002      nan        0.002      0.002     
+c_pi                 24       0.002      nan        0.002      0.002     
+
+SPEEDUP ANALYSIS:
+--------------------
+
+c_pi:
+   1 threads: 1.00x speedup, 100.0% efficiency
+   2 threads: 1.18x speedup, 59.1% efficiency
+   4 threads: 1.72x speedup, 43.0% efficiency
+   8 threads: 1.91x speedup, 23.8% efficiency
+  16 threads: 2.14x speedup, 13.4% efficiency
+  24 threads: 2.05x speedup, 8.6% efficiency

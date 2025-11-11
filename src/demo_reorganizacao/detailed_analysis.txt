@@ -1,0 +1,25 @@
+OmpSCR Benchmark Analysis - Detailed Report
+==================================================
+
+Generated: 2025-11-11 19:11:43
+Total successful runs: 16
+Benchmarks analyzed: 1
+Thread counts tested: [1, 2, 4, 8]
+
+PERFORMANCE SUMMARY:
+------------------------------
+Benchmark            Threads  Avg Time   Std Dev    Min Time   Max Time  
+--------------------------------------------------------------------------------
+c_mandel             1        0.573      0.002      0.572      0.575     
+c_mandel             2        0.297      0.001      0.296      0.299     
+c_mandel             4        0.160      0.003      0.158      0.164     
+c_mandel             8        0.093      0.003      0.090      0.095     
+
+SPEEDUP ANALYSIS:
+--------------------
+
+c_mandel:
+   1 threads: 1.00x speedup, 100.0% efficiency
+   2 threads: 1.93x speedup, 96.4% efficiency
+   4 threads: 3.58x speedup, 89.6% efficiency
+   8 threads: 6.19x speedup, 77.3% efficiency

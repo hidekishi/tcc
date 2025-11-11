@@ -14,20 +14,365 @@ from datetime import datetime
 from pathlib import Path
 import argparse
 import re
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+
+class EmailNotifier:
+    """Handle email notifications for benchmark results"""
+    
+    def __init__(self, smtp_server="smtp.gmail.com", smtp_port=587):
+        self.smtp_server = smtp_server
+        self.smtp_port = smtp_port
+        self.enabled = False
+        self.sender_email = None
+        self.sender_password = None
+        self.recipient_emails = []
+    
+    def configure(self, sender_email, sender_password, recipient_emails):
+        """Configure email settings"""
+        self.sender_email = sender_email
+        self.sender_password = sender_password
+        self.recipient_emails = recipient_emails if isinstance(recipient_emails, list) else [recipient_emails]
+        self.enabled = True
+        
+    def send_notification(self, subject, body, attachments=None):
+        """Send email notification with results"""
+        if not self.enabled:
+            print("📧 Email notifications disabled")
+            return False
+            
+        try:
+            # Create message
+            msg = MIMEMultipart()
+            msg['From'] = self.sender_email
+            msg['To'] = ', '.join(self.recipient_emails)
+            msg['Subject'] = subject
+            
+            # Add body
+            msg.attach(MIMEText(body, 'plain'))
+            
+            # Add attachments
+            if attachments:
+                for file_path in attachments:
+                    if Path(file_path).exists():
+                        with open(file_path, "rb") as attachment:
+                            part = MIMEBase('application', 'octet-stream')
+                            part.set_payload(attachment.read())
+                        
+                        encoders.encode_base64(part)
+                        part.add_header(
+                            'Content-Disposition',
+                            f'attachment; filename= {Path(file_path).name}'
+                        )
+                        msg.attach(part)
+            
+            # Send email
+            server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+            server.starttls()
+            server.login(self.sender_email, self.sender_password)
+            text = msg.as_string()
+            server.sendmail(self.sender_email, self.recipient_emails, text)
+            server.quit()
+            
+            print(f"📧 Email sent successfully to: {', '.join(self.recipient_emails)}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Failed to send email: {e}")
+            return False
+
+class BenchmarkAnalyzer:
+    """Integrated benchmark analysis and visualization"""
+    
+    @staticmethod
+    def analyze_performance(results, output_dir="analysis_output"):
+        """Generate performance analysis plots and reports from results data"""
+        output_dir = Path(output_dir)
+        output_dir.mkdir(exist_ok=True)
+        
+        # Convert results to DataFrame-like structure for analysis
+        df_data = []
+        for result in results:
+            if result.get('success', False):
+                df_data.append({
+                    'benchmark': result['benchmark'],
+                    'threads': result['threads'],
+                    'wall_time': result['wall_time'],
+                    'problem_size': result.get('problem_size', 'unknown'),
+                    'iteration': result.get('iteration', 1)
+                })
+        
+        if not df_data:
+            print("❌ No successful benchmark runs found for analysis!")
+            return None
+            
+        # Try to import plotting libraries
+        try:
+            import pandas as pd
+            import matplotlib.pyplot as plt
+            import seaborn as sns
+            
+            df = pd.DataFrame(df_data)
+            return BenchmarkAnalyzer._generate_plots_and_report(df, output_dir)
+            
+        except ImportError:
+            print("⚠️  matplotlib/seaborn not available. Generating basic text analysis...")
+            return BenchmarkAnalyzer._generate_basic_analysis(df_data, output_dir)
+    
+    @staticmethod
+    def _generate_plots_and_report(df, output_dir):
+        """Generate full analysis with plots"""
+        import pandas as pd
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        
+        # Calculate average times per benchmark/thread combination
+        avg_results = df.groupby(['benchmark', 'threads'])['wall_time'].agg(['mean', 'std', 'min', 'max']).reset_index()
+        
+        # Set up plotting style
+        plt.style.use('default')
+        sns.set_palette("husl")
+        
+        # Configure matplotlib for non-interactive use
+        import matplotlib
+        matplotlib.use('Agg')
+        
+        plots_generated = []
+        
+        try:
+            # 1. Performance vs Thread Count
+            fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+            fig.suptitle('OmpSCR Benchmark Analysis', fontsize=16, fontweight='bold')
+            
+            # Performance vs threads plot
+            benchmarks = df['benchmark'].unique()
+            for i, benchmark in enumerate(benchmarks):
+                bench_data = avg_results[avg_results['benchmark'] == benchmark]
+                color = sns.color_palette("husl", len(benchmarks))[i]
+                axes[0,0].plot(bench_data['threads'], bench_data['mean'], 'o-', 
+                             label=benchmark, color=color, linewidth=2, markersize=6)
+                axes[0,0].fill_between(bench_data['threads'], 
+                                     bench_data['mean'] - bench_data['std'],
+                                     bench_data['mean'] + bench_data['std'],
+                                     alpha=0.2, color=color)
+            
+            axes[0,0].set_xlabel('Number of Threads')
+            axes[0,0].set_ylabel('Execution Time (seconds)')
+            axes[0,0].set_title('Performance vs Thread Count')
+            axes[0,0].legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            axes[0,0].grid(True, alpha=0.3)
+            axes[0,0].set_xscale('log', base=2)
+            
+            # Speedup analysis
+            for i, benchmark in enumerate(benchmarks):
+                bench_data = avg_results[avg_results['benchmark'] == benchmark]
+                if len(bench_data) > 1:
+                    single_thread_data = bench_data[bench_data['threads'] == 1]
+                    if not single_thread_data.empty:
+                        baseline = single_thread_data['mean'].iloc[0]
+                        speedup = baseline / bench_data['mean']
+                        color = sns.color_palette("husl", len(benchmarks))[i]
+                        axes[0,1].plot(bench_data['threads'], speedup, 'o-', 
+                                     label=benchmark, color=color, linewidth=2, markersize=6)
+            
+            # Add ideal speedup line
+            max_threads = df['threads'].max()
+            ideal_threads = [t for t in range(1, max_threads + 1) if t <= max_threads]
+            axes[0,1].plot(ideal_threads, ideal_threads, '--', color='black', 
+                         label='Ideal Speedup', alpha=0.7)
+            
+            axes[0,1].set_xlabel('Number of Threads')
+            axes[0,1].set_ylabel('Speedup Factor')
+            axes[0,1].set_title('Speedup Analysis')
+            axes[0,1].legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            axes[0,1].grid(True, alpha=0.3)
+            axes[0,1].set_xscale('log', base=2)
+            
+            # Parallel efficiency
+            for i, benchmark in enumerate(benchmarks):
+                bench_data = avg_results[avg_results['benchmark'] == benchmark]
+                if len(bench_data) > 1:
+                    single_thread_data = bench_data[bench_data['threads'] == 1]
+                    if not single_thread_data.empty:
+                        baseline = single_thread_data['mean'].iloc[0]
+                        efficiency = (baseline / bench_data['mean']) / bench_data['threads'] * 100
+                        color = sns.color_palette("husl", len(benchmarks))[i]
+                        axes[1,0].plot(bench_data['threads'], efficiency, 'o-', 
+                                     label=benchmark, color=color, linewidth=2, markersize=6)
+            
+            axes[1,0].set_xlabel('Number of Threads')
+            axes[1,0].set_ylabel('Parallel Efficiency (%)')
+            axes[1,0].set_title('Parallel Efficiency')
+            axes[1,0].legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            axes[1,0].grid(True, alpha=0.3)
+            axes[1,0].set_xscale('log', base=2)
+            axes[1,0].set_ylim(0, 110)
+            
+            # Performance heatmap
+            heatmap_data = avg_results.pivot(index='benchmark', columns='threads', values='mean')
+            sns.heatmap(heatmap_data, annot=True, fmt='.3f', cmap='YlOrRd', 
+                       ax=axes[1,1], cbar_kws={'label': 'Execution Time (s)'})
+            axes[1,1].set_title('Performance Heatmap')
+            axes[1,1].set_xlabel('Number of Threads')
+            axes[1,1].set_ylabel('Benchmark')
+            
+            plt.tight_layout()
+            plot_file = output_dir / 'comprehensive_analysis.png'
+            plt.savefig(plot_file, dpi=300, bbox_inches='tight')
+            plt.close()
+            plots_generated.append(plot_file)
+            
+        except Exception as e:
+            print(f"⚠️  Error generating plots: {e}")
+        
+        # Generate detailed text report
+        report_file = output_dir / 'detailed_analysis.txt'
+        BenchmarkAnalyzer._generate_text_report(df, avg_results, report_file)
+        
+        return {
+            'plots': plots_generated,
+            'report': report_file,
+            'summary': BenchmarkAnalyzer._get_analysis_summary(df, avg_results)
+        }
+    
+    @staticmethod
+    def _generate_basic_analysis(df_data, output_dir):
+        """Generate basic analysis without plots"""
+        # Simple grouping and analysis
+        benchmark_stats = {}
+        for result in df_data:
+            key = (result['benchmark'], result['threads'])
+            if key not in benchmark_stats:
+                benchmark_stats[key] = []
+            benchmark_stats[key].append(result['wall_time'])
+        
+        # Calculate averages
+        avg_results = []
+        for (benchmark, threads), times in benchmark_stats.items():
+            avg_results.append({
+                'benchmark': benchmark,
+                'threads': threads,
+                'mean': sum(times) / len(times),
+                'std': (sum((t - sum(times)/len(times))**2 for t in times) / len(times))**0.5 if len(times) > 1 else 0,
+                'min': min(times),
+                'max': max(times)
+            })
+        
+        # Generate text report
+        report_file = output_dir / 'basic_analysis.txt'
+        with open(report_file, 'w') as f:
+            f.write("OmpSCR Benchmark Analysis - Basic Report\n")
+            f.write("=" * 50 + "\n\n")
+            f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Total successful runs: {len(df_data)}\n\n")
+            
+            f.write("Performance Summary:\n")
+            f.write("-" * 30 + "\n")
+            f.write(f"{'Benchmark':<20} {'Threads':<8} {'Avg Time':<10} {'Std Dev':<10}\n")
+            f.write("-" * 60 + "\n")
+            
+            for result in sorted(avg_results, key=lambda x: (x['benchmark'], x['threads'])):
+                f.write(f"{result['benchmark']:<20} {result['threads']:<8} "
+                       f"{result['mean']:<10.3f} {result['std']:<10.3f}\n")
+        
+        return {
+            'plots': [],
+            'report': report_file,
+            'summary': f"Basic analysis completed. {len(df_data)} successful runs analyzed."
+        }
+    
+    @staticmethod
+    def _generate_text_report(df, avg_results, report_file):
+        """Generate detailed text analysis report"""
+        with open(report_file, 'w') as f:
+            f.write("OmpSCR Benchmark Analysis - Detailed Report\n")
+            f.write("=" * 50 + "\n\n")
+            f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Total successful runs: {len(df)}\n")
+            f.write(f"Benchmarks analyzed: {len(df['benchmark'].unique())}\n")
+            f.write(f"Thread counts tested: {sorted(df['threads'].unique())}\n\n")
+            
+            # Performance summary
+            f.write("PERFORMANCE SUMMARY:\n")
+            f.write("-" * 30 + "\n")
+            f.write(f"{'Benchmark':<20} {'Threads':<8} {'Avg Time':<10} {'Std Dev':<10} {'Min Time':<10} {'Max Time':<10}\n")
+            f.write("-" * 80 + "\n")
+            
+            for _, row in avg_results.iterrows():
+                f.write(f"{row['benchmark']:<20} {row['threads']:<8} "
+                       f"{row['mean']:<10.3f} {row['std']:<10.3f} "
+                       f"{row['min']:<10.3f} {row['max']:<10.3f}\n")
+            
+            # Speedup analysis
+            f.write("\nSPEEDUP ANALYSIS:\n")
+            f.write("-" * 20 + "\n")
+            
+            benchmarks = df['benchmark'].unique()
+            for benchmark in sorted(benchmarks):
+                f.write(f"\n{benchmark}:\n")
+                bench_data = avg_results[avg_results['benchmark'] == benchmark].sort_values('threads')
+                
+                single_thread_data = bench_data[bench_data['threads'] == 1]
+                if not single_thread_data.empty:
+                    baseline = single_thread_data['mean'].iloc[0]
+                    
+                    for _, row in bench_data.iterrows():
+                        speedup = baseline / row['mean']
+                        efficiency = speedup / row['threads'] * 100
+                        f.write(f"  {row['threads']:2d} threads: {speedup:.2f}x speedup, {efficiency:.1f}% efficiency\n")
+                else:
+                    f.write("  No single-thread baseline available\n")
+    
+    @staticmethod
+    def _get_analysis_summary(df, avg_results):
+        """Get a brief summary of the analysis"""
+        benchmarks = len(df['benchmark'].unique())
+        thread_counts = len(df['threads'].unique())
+        total_runs = len(df)
+        
+        # Find best performing configurations
+        best_configs = []
+        for benchmark in df['benchmark'].unique():
+            bench_data = avg_results[avg_results['benchmark'] == benchmark]
+            if not bench_data.empty:
+                best_row = bench_data.loc[bench_data['mean'].idxmin()]
+                best_configs.append(f"{benchmark}: {best_row['threads']} threads ({best_row['mean']:.3f}s)")
+        
+        summary = f"""
+Analysis Summary:
+- {benchmarks} benchmarks analyzed
+- {thread_counts} different thread counts tested  
+- {total_runs} successful benchmark runs
+- Best configurations: {', '.join(best_configs[:3])}{'...' if len(best_configs) > 3 else ''}
+"""
+        return summary
 
 class BenchmarkRunner:
-    def __init__(self, output_dir="benchmark_results"):
+    def __init__(self, output_dir="benchmark_results", check_integrity=False, integrity_threshold=0.1, show_cpu_usage=False):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
         
-        # Problem sizes: tiny, small, medium, large, huge, extreme
+        # Initialize email notifier and analyzer
+        self.email_notifier = EmailNotifier()
+        self.analyzer = BenchmarkAnalyzer()
+        
+        # Analysis settings
+        self.auto_analyze = False
+        self.analysis_output_dir = None
+        self.check_integrity_detailed = check_integrity
+        self.integrity_threshold = integrity_threshold
+        self.show_cpu_usage = show_cpu_usage
+        
+        # Problem sizes: 5 distintivos níveis para análise de escalabilidade otimizada
         self.problem_sizes = {
-            'tiny': {'grid_size': 25, 'iterations': 10, 'array_size': 1000, 'fft_size': 512},
-            'small': {'grid_size': 50, 'iterations': 25, 'array_size': 5000, 'fft_size': 1024},
-            'medium': {'grid_size': 200, 'iterations': 100, 'array_size': 25000, 'fft_size': 2048}, 
-            'large': {'grid_size': 500, 'iterations': 200, 'array_size': 100000, 'fft_size': 4096},
-            'huge': {'grid_size': 1000, 'iterations': 300, 'array_size': 500000, 'fft_size': 8192},
-            'extreme': {'grid_size': 2000, 'iterations': 500, 'array_size': 1000000, 'fft_size': 16384}
+            'small': {'grid_size': 512, 'iterations': 100, 'array_size': 100000, 'fft_size': 2048},      # ~2MB
+            'medium': {'grid_size': 2048, 'iterations': 500, 'array_size': 1000000, 'fft_size': 8192},   # ~16MB  
+            'large': {'grid_size': 4096, 'iterations': 1000, 'array_size': 4000000, 'fft_size': 32768},  # ~64MB
+            'huge': {'grid_size': 8192, 'iterations': 2000, 'array_size': 16000000, 'fft_size': 131072}, # ~256MB
+            'extreme': {'grid_size': 16384, 'iterations': 4000, 'array_size': 64000000, 'fft_size': 524288} # ~1GB
         }
         
         # Results storage
@@ -54,7 +399,10 @@ class BenchmarkRunner:
                     'medium': ['-test'], 
                     'large': ['-test'],
                     'huge': ['-test'],
-                    'extreme': ['-test']
+                    'extreme': ['-test'],
+                    'massive': ['-test'],
+                    'colossal': ['-test'],
+                    'gigantic': ['-test']
                 },
                 'description': 'Pi calculation using numerical integration'
             },
@@ -66,7 +414,10 @@ class BenchmarkRunner:
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
-                    'extreme': ['-test']
+                    'extreme': ['-test'],
+                    'massive': ['-test'],
+                    'colossal': ['-test'],
+                    'gigantic': ['-test']
                 },
                 'description': 'Mandelbrot set generator'
             },
@@ -78,7 +429,10 @@ class BenchmarkRunner:
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
-                    'extreme': ['-test']
+                    'extreme': ['-test'],
+                    'massive': ['-test'],
+                    'colossal': ['-test'],
+                    'gigantic': ['-test']
                 },
                 'description': 'Parallel quicksort'
             },
@@ -90,7 +444,10 @@ class BenchmarkRunner:
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
-                    'extreme': ['-test']
+                    'extreme': ['-test'],
+                    'massive': ['-test'],
+                    'colossal': ['-test'],
+                    'gigantic': ['-test']
                 },
                 'description': 'Fast Fourier Transform'
             },
@@ -102,7 +459,10 @@ class BenchmarkRunner:
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
-                    'extreme': ['-test']
+                    'extreme': ['-test'],
+                    'massive': ['-test'],
+                    'colossal': ['-test'],
+                    'gigantic': ['-test']
                 },
                 'description': '6-point FFT implementation'
             },
@@ -114,7 +474,10 @@ class BenchmarkRunner:
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
-                    'extreme': ['-test']
+                    'extreme': ['-test'],
+                    'massive': ['-test'],
+                    'colossal': ['-test'],
+                    'gigantic': ['-test']
                 },
                 'description': 'Molecular Dynamics simulation'
             },
@@ -126,7 +489,10 @@ class BenchmarkRunner:
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
-                    'extreme': ['-test']
+                    'extreme': ['-test'],
+                    'massive': ['-test'],
+                    'colossal': ['-test'],
+                    'gigantic': ['-test']
                 },
                 'description': 'LU decomposition'
             },
@@ -140,7 +506,10 @@ class BenchmarkRunner:
                     'medium': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
                     'large': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
                     'huge': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
-                    'extreme': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}']
+                    'extreme': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'massive': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'colossal': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'gigantic': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}']
                 },
                 'description': 'Jacobi iterative solver v1'
             },
@@ -152,7 +521,10 @@ class BenchmarkRunner:
                     'medium': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
                     'large': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
                     'huge': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
-                    'extreme': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}']
+                    'extreme': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'massive': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'colossal': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'gigantic': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}']
                 },
                 'description': 'Jacobi iterative solver v2'
             },
@@ -164,7 +536,10 @@ class BenchmarkRunner:
                     'medium': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
                     'large': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
                     'huge': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
-                    'extreme': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}']
+                    'extreme': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'massive': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'colossal': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'gigantic': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}']
                 },
                 'description': 'Jacobi iterative solver v3'
             },
@@ -178,7 +553,10 @@ class BenchmarkRunner:
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
-                    'extreme': ['-test']
+                    'extreme': ['-test'],
+                    'massive': ['-test'],
+                    'colossal': ['-test'],
+                    'gigantic': ['-test']
                 },
                 'description': 'Loop A dependency - Solution 1'
             },
@@ -190,7 +568,10 @@ class BenchmarkRunner:
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
-                    'extreme': ['-test']
+                    'extreme': ['-test'],
+                    'massive': ['-test'],
+                    'colossal': ['-test'],
+                    'gigantic': ['-test']
                 },
                 'description': 'Loop A dependency - Solution 2'
             },
@@ -202,7 +583,10 @@ class BenchmarkRunner:
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
-                    'extreme': ['-test']
+                    'extreme': ['-test'],
+                    'massive': ['-test'],
+                    'colossal': ['-test'],
+                    'gigantic': ['-test']
                 },
                 'description': 'Loop A dependency - Solution 3'
             },
@@ -214,7 +598,10 @@ class BenchmarkRunner:
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
-                    'extreme': ['-test']
+                    'extreme': ['-test'],
+                    'massive': ['-test'],
+                    'colossal': ['-test'],
+                    'gigantic': ['-test']
                 },
                 'description': 'Loop B dependency - Pipeline Solution'
             },
@@ -228,7 +615,10 @@ class BenchmarkRunner:
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
-                    'extreme': ['-test']
+                    'extreme': ['-test'],
+                    'massive': ['-test'],
+                    'colossal': ['-test'],
+                    'gigantic': ['-test']
                 },
                 'description': 'Loop A dependency - Bad Solution (has races)'
             },
@@ -240,7 +630,10 @@ class BenchmarkRunner:
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
-                    'extreme': ['-test']
+                    'extreme': ['-test'],
+                    'massive': ['-test'],
+                    'colossal': ['-test'],
+                    'gigantic': ['-test']
                 },
                 'description': 'Loop B dependency - Bad Solution 1 (has races)'
             },
@@ -252,14 +645,29 @@ class BenchmarkRunner:
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
-                    'extreme': ['-test']
+                    'extreme': ['-test'],
+                    'massive': ['-test'],
+                    'colossal': ['-test'],
+                    'gigantic': ['-test']
                 },
                 'description': 'Loop B dependency - Bad Solution 2 (has races)'
             }
         }
         
-        # Default thread counts to test
-        self.default_threads = [1, 2, 4, 8, 16, 32]
+        # Default thread counts to test (max 24 threads available)
+        self.default_threads = [1, 2, 4, 8, 16, 24]
+    
+    def enable_auto_analysis(self, analysis_output_dir="analysis_output"):
+        """Enable automatic analysis after benchmark completion"""
+        self.auto_analyze = True
+        self.analysis_output_dir = analysis_output_dir
+        
+    def configure_email_notifications(self, sender_email, sender_password, recipient_emails, 
+                                    smtp_server="smtp.gmail.com", smtp_port=587):
+        """Configure email notifications for benchmark completion"""
+        self.email_notifier.smtp_server = smtp_server
+        self.email_notifier.smtp_port = smtp_port
+        self.email_notifier.configure(sender_email, sender_password, recipient_emails)
         
     def check_binary_exists(self, binary_path):
         """Check if the benchmark binary exists and is executable"""
@@ -285,6 +693,100 @@ class BenchmarkRunner:
                 args.append(arg)
         
         return args
+    
+    def show_cpu_topology(self):
+        """Display CPU topology information"""
+        try:
+            print("\n🖥️  CPU TOPOLOGY INFORMATION")
+            print("=" * 50)
+            
+            import multiprocessing
+            total_cores = multiprocessing.cpu_count()
+            print(f"📊 Total logical processors: {total_cores}")
+            
+            # Try to get physical core count
+            try:
+                import psutil
+                physical_cores = psutil.cpu_count(logical=False)
+                logical_cores = psutil.cpu_count(logical=True)
+                print(f"🔧 Physical cores: {physical_cores}")
+                print(f"🧵 Logical cores (with HT): {logical_cores}")
+                
+                if logical_cores > physical_cores:
+                    print(f"⚡ Hyperthreading: Enabled ({logical_cores//physical_cores}x)")
+                else:
+                    print(f"⚡ Hyperthreading: Disabled")
+                    
+            except ImportError:
+                print("📝 Note: Install 'psutil' for detailed CPU topology")
+            
+            # Show OpenMP environment
+            print("\n🔧 OpenMP Configuration:")
+            print(f"   OMP_PROC_BIND: close (use adjacent cores)")
+            print(f"   OMP_PLACES: cores (one thread per core)")
+            print(f"   OMP_DISPLAY_AFFINITY: enabled")
+            
+            # Check for NUMA
+            try:
+                numa_info = subprocess.run(['numactl', '--hardware'], 
+                                         capture_output=True, text=True, timeout=5)
+                if numa_info.returncode == 0:
+                    numa_nodes = len([line for line in numa_info.stdout.split('\n') 
+                                    if 'node' in line and 'cpus:' in line])
+                    print(f"🏗️  NUMA nodes: {numa_nodes}")
+                else:
+                    print(f"🏗️  NUMA: Information not available")
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                print(f"🏗️  NUMA: numactl not available")
+            
+            print("=" * 50)
+            
+        except Exception as e:
+            print(f"⚠️  Could not retrieve CPU topology: {e}")
+    
+    def get_cpu_affinity_info(self, thread_count):
+        """Get CPU core mapping information for the specified thread count"""
+        try:
+            # Get CPU information
+            import multiprocessing
+            total_cores = multiprocessing.cpu_count()
+            
+            # For close binding, threads typically use cores 0, 1, 2, ..., thread_count-1
+            if thread_count <= total_cores:
+                cores_used = list(range(thread_count))
+                return f"Cores {cores_used} of {total_cores} available"
+            else:
+                return f"Warning: {thread_count} threads > {total_cores} cores (oversubscription)"
+                
+        except Exception:
+            return None
+    
+    def extract_cpu_usage_info(self, output):
+        """Extract CPU core usage information from benchmark output"""
+        cpu_cores = []
+        
+        # Look for OpenMP affinity information
+        affinity_patterns = [
+            r'Thread\s+\d+:\s+Core\s+(\d+)',
+            r'thread\s+\d+\s+bound\s+to\s+OS\s+proc\s+(\d+)',
+            r'Thread\s+\d+.*?core\s+(\d+)',
+            r'OMP:\s+Info.*?thread\s+\d+.*?(\d+)'
+        ]
+        
+        for pattern in affinity_patterns:
+            matches = re.findall(pattern, output, re.IGNORECASE)
+            if matches:
+                cpu_cores.extend([int(core) for core in matches])
+        
+        if cpu_cores:
+            unique_cores = sorted(set(cpu_cores))
+            if len(unique_cores) == len(cpu_cores):
+                return f"{unique_cores}"
+            else:
+                # Some cores used by multiple threads (hyperthreading or oversubscription)
+                return f"{unique_cores} (some shared)"
+        
+        return None
     
     def update_progress(self, force_save=False):
         """Update progress information and optionally save results"""
@@ -352,11 +854,27 @@ class BenchmarkRunner:
             print(f"  ⚠️  Binary not found: {binary}")
             return None
             
-        # Set environment
+        # Set environment with CPU affinity information
         env = os.environ.copy()
         env['OMP_NUM_THREADS'] = str(thread_count)
         
+        # Configure OpenMP to display thread-to-core mapping
+        env['OMP_DISPLAY_AFFINITY'] = 'TRUE'
+        env['OMP_AFFINITY_FORMAT'] = 'Thread %0.3n: Core %A'
+        
+        # Set close affinity to use adjacent cores
+        env['OMP_PROC_BIND'] = 'close'
+        env['OMP_PLACES'] = 'cores'
+        
         print(f"  Running {name} ({problem_size}) with {thread_count} threads (iteration {iteration})...")
+        
+        # Get CPU affinity information before execution
+        if self.show_cpu_usage:
+            cpu_info = self.get_cpu_affinity_info(thread_count)
+            if cpu_info:
+                print(f"    💻 CPU Mapping: {cpu_info}")
+        else:
+            cpu_info = None
         
         # Update current status
         self.current_benchmark = name
@@ -370,15 +888,18 @@ class BenchmarkRunner:
                 [f"./{binary}"] + args,
                 capture_output=True,
                 text=True,
-                timeout=600,  # 10 minute timeout for larger problems
+                timeout=1800,  # 30 minute timeout for extreme problems
                 env=env
             )
             
             end_time = time.time()
             wall_time = end_time - start_time
             
-            # Parse output for additional metrics
+            # Parse output for additional metrics and CPU usage
             timing_info = self.extract_timing_info(result.stdout)
+            
+            # Extract CPU affinity information from output
+            cpu_usage = self.extract_cpu_usage_info(result.stderr + result.stdout) if self.show_cpu_usage else None
             
             result_data = {
                 'timestamp': datetime.now().isoformat(),
@@ -392,11 +913,16 @@ class BenchmarkRunner:
                 'success': result.returncode == 0,
                 'stdout': result.stdout,
                 'stderr': result.stderr,
+                'cpu_affinity': cpu_info if self.show_cpu_usage else None,
+                'cpu_usage': cpu_usage,
                 **timing_info
             }
             
             if result.returncode == 0:
-                print(f"    ✓ Completed in {wall_time:.3f}s")
+                if self.show_cpu_usage and cpu_usage:
+                    print(f"    ✓ Completed in {wall_time:.3f}s - Cores used: {cpu_usage}")
+                else:
+                    print(f"    ✓ Completed in {wall_time:.3f}s")
             else:
                 print(f"    ✗ Failed with exit code {result.returncode}")
             
@@ -407,7 +933,7 @@ class BenchmarkRunner:
             return result_data
             
         except subprocess.TimeoutExpired:
-            print(f"    ⏱️  Timeout after 10 minutes")
+            print(f"    ⏱️  Timeout after 30 minutes")
             self.completed_runs += 1
             self.update_progress()
             return {
@@ -417,7 +943,7 @@ class BenchmarkRunner:
                 'threads': thread_count,
                 'problem_size': problem_size,
                 'iteration': iteration,
-                'wall_time': 600.0,
+                'wall_time': 1800.0,
                 'exit_code': -1,
                 'success': False,
                 'stdout': '',
@@ -455,18 +981,182 @@ class BenchmarkRunner:
             'elapsed_time': r'elapsed time.*?(\d+\.?\d*)',
             'mflops': r'MFlops.*?(\d+\.?\d*)',
             'pi_error': r'ERROR\s*(\d+\.?\d*e?[+-]?\d*)',
-            'solution_error': r'Solution Error.*?(\d+\.?\d*e?[+-]?\d*)'
+            'solution_error': r'Solution Error.*?(\d+\.?\d*e?[+-]?\d*)',
+            'pi_value': r'PI\s*=\s*(\d+\.?\d*)',
+            'checksum': r'checksum.*?(\d+)',
+            'verification': r'verification.*?(SUCCESSFUL|FAILED|passed|failed)',
+            'result_value': r'Result.*?(\d+\.?\d*e?[+-]?\d*)',
+            'iterations_done': r'iterations.*?(\d+)',
+            'convergence': r'converged.*?(\d+\.?\d*e?[+-]?\d*)',
+            'final_error': r'Final.*?error.*?(\d+\.?\d*e?[+-]?\d*)',
+            'array_sum': r'Sum.*?(\d+\.?\d*e?[+-]?\d*)',
+            'matrix_norm': r'Norm.*?(\d+\.?\d*e?[+-]?\d*)'
         }
         
         for key, pattern in patterns.items():
             match = re.search(pattern, output, re.IGNORECASE)
             if match:
                 try:
-                    info[key] = float(match.group(1))
+                    if key == 'verification':
+                        info[key] = match.group(1).upper()
+                    else:
+                        info[key] = float(match.group(1))
                 except ValueError:
                     info[key] = match.group(1)
         
+        # Store full output for integrity checking
+        info['full_output'] = output
+        
         return info
+    
+    def check_result_integrity(self, results, benchmark_name):
+        """Check integrity of results across different configurations"""
+        integrity_report = {
+            'benchmark': benchmark_name,
+            'consistent': True,
+            'issues': [],
+            'reference_values': {},
+            'value_ranges': {},
+            'verification_status': {}
+        }
+        
+        # Filter results for this benchmark
+        benchmark_results = [r for r in results if r.get('benchmark') == benchmark_name and r.get('success')]
+        
+        if len(benchmark_results) < 2:
+            integrity_report['issues'].append("Insufficient results for integrity check")
+            return integrity_report
+        
+        # Check consistency of numerical results
+        numerical_fields = ['pi_value', 'result_value', 'array_sum', 'matrix_norm', 'checksum']
+        
+        for field in numerical_fields:
+            values = [r.get(field) for r in benchmark_results if r.get(field) is not None]
+            if values:
+                min_val = min(values)
+                max_val = max(values)
+                avg_val = sum(values) / len(values)
+                
+                # Calculate relative variance
+                if avg_val != 0:
+                    variance = ((max_val - min_val) / avg_val) * 100
+                else:
+                    variance = 0
+                
+                integrity_report['reference_values'][field] = avg_val
+                integrity_report['value_ranges'][field] = {
+                    'min': min_val,
+                    'max': max_val,
+                    'variance_pct': variance
+                }
+                
+                # Flag if variance > threshold (may indicate race conditions or numerical instability)
+                if variance > self.integrity_threshold:
+                    integrity_report['consistent'] = False
+                    integrity_report['issues'].append(f"{field}: {variance:.3f}% variance (min={min_val}, max={max_val})")
+        
+        # Check verification status consistency
+        verifications = [r.get('verification') for r in benchmark_results if r.get('verification') is not None]
+        if verifications:
+            unique_verifications = set(verifications)
+            integrity_report['verification_status'] = {
+                'values': list(unique_verifications),
+                'count': len(verifications),
+                'consistent': len(unique_verifications) == 1
+            }
+            
+            if len(unique_verifications) > 1:
+                integrity_report['consistent'] = False
+                integrity_report['issues'].append(f"Inconsistent verification status: {unique_verifications}")
+        
+        # Check for abnormal execution patterns
+        execution_times = [r.get('wall_time') for r in benchmark_results if r.get('wall_time') is not None]
+        if execution_times:
+            avg_time = sum(execution_times) / len(execution_times)
+            outliers = [t for t in execution_times if abs(t - avg_time) > avg_time * 2]  # 200% deviation
+            
+            if outliers:
+                integrity_report['issues'].append(f"Execution time outliers detected: {len(outliers)} runs significantly different")
+        
+        return integrity_report
+    
+    def generate_integrity_report(self, results):
+        """Generate comprehensive integrity report for all benchmarks"""
+        print("\n🔍 GENERATING INTEGRITY REPORT...")
+        
+        # Group results by benchmark
+        benchmarks = set(r.get('benchmark') for r in results if r.get('success'))
+        
+        integrity_reports = {}
+        overall_issues = []
+        
+        for benchmark in benchmarks:
+            report = self.check_result_integrity(results, benchmark)
+            integrity_reports[benchmark] = report
+            
+            if not report['consistent']:
+                overall_issues.extend([f"{benchmark}: {issue}" for issue in report['issues']])
+        
+        # Generate summary
+        consistent_benchmarks = sum(1 for r in integrity_reports.values() if r['consistent'])
+        total_benchmarks = len(integrity_reports)
+        
+        print(f"📊 INTEGRITY SUMMARY:")
+        print(f"   Benchmarks analyzed: {total_benchmarks}")
+        print(f"   Consistent results: {consistent_benchmarks}/{total_benchmarks}")
+        
+        if overall_issues:
+            print(f"   ⚠️  Issues found: {len(overall_issues)}")
+            print("\n🚨 INTEGRITY ISSUES:")
+            for issue in overall_issues[:10]:  # Show first 10 issues
+                print(f"   • {issue}")
+            if len(overall_issues) > 10:
+                print(f"   ... and {len(overall_issues) - 10} more issues")
+        else:
+            print("   ✅ All benchmarks show consistent results!")
+        
+        return integrity_reports
+    
+    def show_detailed_integrity_report(self, integrity_reports):
+        """Show detailed integrity report in console"""
+        print("\n" + "=" * 80)
+        print("🔍 DETAILED INTEGRITY VERIFICATION REPORT")
+        print("=" * 80)
+        
+        for benchmark, report in integrity_reports.items():
+            print(f"\n📊 {benchmark.upper()}:")
+            print(f"   Status: {'✅ CONSISTENT' if report['consistent'] else '⚠️  INCONSISTENT'}")
+            
+            if report['reference_values']:
+                print(f"   📈 Reference Values:")
+                for field, value in report['reference_values'].items():
+                    range_info = report['value_ranges'][field]
+                    variance = range_info['variance_pct']
+                    status = "✅" if variance <= self.integrity_threshold else "⚠️"
+                    print(f"      {status} {field}: {value:.6g} (variance: {variance:.3f}%)")
+            
+            if report['verification_status']:
+                vs = report['verification_status']
+                status = "✅" if vs['consistent'] else "⚠️"
+                print(f"   {status} Verification: {vs['values']} ({vs['count']} runs)")
+            
+            if report['issues']:
+                print(f"   🚨 Issues ({len(report['issues'])}):")
+                for issue in report['issues']:
+                    print(f"      • {issue}")
+        
+        print(f"\n📋 Summary:")
+        consistent = sum(1 for r in integrity_reports.values() if r['consistent'])
+        total = len(integrity_reports)
+        print(f"   Consistent benchmarks: {consistent}/{total}")
+        
+        if consistent < total:
+            print(f"   ⚠️  Recommendations:")
+            print(f"      • Check for race conditions in inconsistent benchmarks")
+            print(f"      • Verify numerical stability across thread counts")
+            print(f"      • Consider increasing problem sizes for better thread scaling")
+        
+        print("=" * 80)
     
     def run_benchmarks(self, thread_counts=None, iterations=1, benchmarks=None, problem_sizes=None):
         """Run all benchmarks with specified parameters"""
@@ -477,7 +1167,11 @@ class BenchmarkRunner:
             benchmarks = list(self.benchmarks.keys())
         
         if problem_sizes is None:
-            problem_sizes = ['tiny', 'small', 'medium', 'large', 'huge', 'extreme']
+            problem_sizes = ['tiny', 'small', 'medium', 'large', 'huge', 'extreme', 'massive', 'colossal', 'gigantic']
+        
+        # Show CPU topology information if requested
+        if self.show_cpu_usage:
+            self.show_cpu_topology()
         
         # Filter benchmarks to only include available ones
         available_benchmarks = []
@@ -538,7 +1232,7 @@ class BenchmarkRunner:
         print("✅ Benchmark execution completed!")
         
     def save_results(self, timestamp=None):
-        """Save results to CSV and JSON files"""
+        """Save results to CSV and JSON files, with optional analysis and email notification"""
         if timestamp is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
@@ -566,17 +1260,123 @@ class BenchmarkRunner:
                     writer.writerow(row)
         
         # Generate summary report
-        self.generate_summary_report(timestamp)
+        summary_file = self.generate_summary_report(timestamp)
         
         print(f"📁 Results saved:")
         print(f"   CSV: {csv_file}")
         print(f"   JSON: {json_file}")
-        print(f"   Summary: {self.output_dir}/benchmark_summary_{timestamp}.txt")
+        print(f"   Summary: {summary_file}")
+        
+        # Perform automatic analysis if enabled
+        analysis_result = None
+        if self.auto_analyze:
+            print(f"\n🔍 Running automatic analysis...")
+            analysis_dir = self.analysis_output_dir or f"analysis_output_{timestamp}"
+            analysis_result = self.analyzer.analyze_performance(self.results, analysis_dir)
+            
+            if analysis_result:
+                print(f"📊 Analysis completed:")
+                if analysis_result['plots']:
+                    print(f"   📈 Plots: {len(analysis_result['plots'])} generated")
+                print(f"   📋 Report: {analysis_result['report']}")
+        
+        # Generate integrity report
+        integrity_reports = self.generate_integrity_report(self.results)
+        integrity_file = self.output_dir / f"integrity_report_{timestamp}.json"
+        with open(integrity_file, 'w') as f:
+            json.dump(integrity_reports, f, indent=2)
+        
+        print(f"   🔍 Integrity: {integrity_file}")
+        
+        # Show detailed integrity report if requested
+        if self.check_integrity_detailed:
+            self.show_detailed_integrity_report(integrity_reports)
+        
+        # Send email notification if configured
+        if self.email_notifier.enabled:
+            self.send_email_notification(timestamp, csv_file, json_file, summary_file, analysis_result)
+        
+        return {
+            'csv': csv_file,
+            'json': json_file, 
+            'summary': summary_file,
+            'analysis': analysis_result,
+            'integrity': integrity_file
+        }
+    
+    def send_email_notification(self, timestamp, csv_file, json_file, summary_file, analysis_result):
+        """Send email notification with benchmark results"""
+        try:
+            # Calculate basic statistics
+            total_runs = len(self.results)
+            successful_runs = sum(1 for r in self.results if r.get('success', False))
+            success_rate = (successful_runs / total_runs * 100) if total_runs > 0 else 0
+            
+            if successful_runs > 0:
+                avg_time = sum(r.get('wall_time', 0) for r in self.results if r.get('success', False)) / successful_runs
+            else:
+                avg_time = 0
+            
+            # Execution duration
+            if self.start_time:
+                execution_duration = time.time() - self.start_time
+                duration_str = f"{execution_duration/60:.1f} minutes"
+            else:
+                duration_str = "Unknown"
+            
+            # Create email body
+            subject = f"OmpSCR Benchmark Results - {timestamp}"
+            
+            body = f"""
+OmpSCR Benchmark Execution Completed
+=====================================
+
+Execution Summary:
+- Timestamp: {timestamp}
+- Total runs: {total_runs}
+- Successful runs: {successful_runs}
+- Success rate: {success_rate:.1f}%
+- Average execution time: {avg_time:.3f}s
+- Total execution duration: {duration_str}
+
+Benchmarks tested: {len(set(r.get('benchmark', 'Unknown') for r in self.results))}
+Thread counts: {sorted(set(r.get('threads', 0) for r in self.results))}
+Problem sizes: {sorted(set(r.get('problem_size', 'Unknown') for r in self.results))}
+
+"""
+            
+            if analysis_result:
+                body += f"""
+Analysis Results:
+- Plots generated: {len(analysis_result['plots'])}
+- Analysis report: {analysis_result['report'].name}
+- Summary: {analysis_result['summary'].strip()}
+"""
+            
+            # Prepare attachments
+            attachments = [str(csv_file), str(json_file), str(summary_file)]
+            
+            if analysis_result:
+                if analysis_result['report']:
+                    attachments.append(str(analysis_result['report']))
+                if analysis_result['plots']:
+                    attachments.extend([str(plot) for plot in analysis_result['plots']])
+            
+            # Send email
+            success = self.email_notifier.send_notification(subject, body, attachments)
+            
+            if success:
+                print(f"📧 Email notification sent successfully!")
+            else:
+                print(f"⚠️  Email notification failed")
+                
+        except Exception as e:
+            print(f"❌ Error sending email notification: {e}")
     
     def generate_summary_report(self, timestamp):
         """Generate a text summary of the benchmark results"""
         if not self.results:
-            return
+            return None
         
         summary_file = self.output_dir / f"benchmark_summary_{timestamp}.txt"
         
@@ -627,31 +1427,107 @@ class BenchmarkRunner:
                     min_time = min(times)
                     max_time = max(times)
                     f.write(f"{benchmark:20} {problem_size:8} {threads:8d} {avg_time:11.3f} {min_time:11.3f} {max_time:11.3f}\n")
+        
+        return summary_file
 
 def main():
     parser = argparse.ArgumentParser(description='Run OmpSCR benchmarks with varying parameters')
-    parser.add_argument('--threads', type=str, default='1,2,4,8,16,32',
-                        help='Comma-separated list of thread counts (default: 1,2,4,8,16,32)')
+    parser.add_argument('--threads', type=str, default='1,2,4,8,16,24',
+                        help='Comma-separated list of thread counts (default: 1,2,4,8,16,24)')
     parser.add_argument('--iterations', type=int, default=3,
                         help='Number of iterations per configuration (default: 3)')
     parser.add_argument('--benchmarks', type=str, default='all',
                         help='Comma-separated list of benchmarks or "all" (default: all)')
-    parser.add_argument('--problem-sizes', type=str, default='tiny,small,medium,large,huge,extreme',
-                        help='Comma-separated list of problem sizes: tiny,small,medium,large,huge,extreme (default: all)')
+    parser.add_argument('--problem-sizes', type=str, default='tiny,small,medium,large,huge,extreme,massive,colossal,gigantic',
+                        help='Comma-separated list of problem sizes: tiny,small,medium,large,huge,extreme,massive,colossal,gigantic (default: all)')
     parser.add_argument('--output', type=str, default='benchmark_results',
                         help='Output directory (default: benchmark_results)')
     parser.add_argument('--list', action='store_true',
                         help='List available benchmarks and exit')
     parser.add_argument('--full-test', action='store_true',
-                        help='Run comprehensive test with 1,2,4,8,12,16,24 threads, all sizes, 10 iterations')
+                        help='Run comprehensive test with 1,2,4,8,12,16,24 threads, ALL sizes (tiny→gigantic), 10 iterations')
     parser.add_argument('--quick-test', action='store_true',
                         help='Run quick test with 1,2,4 threads, tiny,small,medium sizes, 3 iterations')
     parser.add_argument('--stress-test', action='store_true',
-                        help='Run stress test with 1,2,4,8,16,24,32 threads, all sizes including extreme, 15 iterations')
+                        help='Run stress test with 1,2,4,8,16,24,32 threads, all sizes including gigantic, 15 iterations')
+    parser.add_argument('--extreme-test', action='store_true',
+                        help='Run extreme test with massive,colossal,gigantic sizes only, 1,2,4,8,16,32,48,64 threads, 5 iterations')
+    parser.add_argument('--auto-analyze', action='store_true',
+                        help='Automatically run analysis and generate plots after benchmark completion')
+    parser.add_argument('--analysis-output', type=str, default='analysis_output',
+                        help='Output directory for analysis results (default: analysis_output)')
+    parser.add_argument('--check-integrity', action='store_true',
+                        help='Show detailed integrity report for result verification across configurations')
+    parser.add_argument('--integrity-threshold', type=float, default=0.1,
+                        help='Variance threshold percentage for integrity checks (default: 0.1)')
+    parser.add_argument('--show-cpu-usage', action='store_true',
+                        help='Show detailed CPU core usage information during execution')
+    parser.add_argument('--email-notification', action='store_true',
+                        help='Send email notification with results (requires email configuration)')
+    parser.add_argument('--email-config', type=str,
+                        help='Email configuration file (JSON format with sender, password, recipients)')
+    parser.add_argument('--email-sender', type=str,
+                        help='Sender email address')
+    parser.add_argument('--email-recipients', type=str,
+                        help='Comma-separated list of recipient email addresses')
     
     args = parser.parse_args()
     
-    runner = BenchmarkRunner(args.output)
+    runner = BenchmarkRunner(args.output, args.check_integrity, args.integrity_threshold, args.show_cpu_usage)
+    
+    # Configure automatic analysis if requested
+    if args.auto_analyze:
+        runner.enable_auto_analysis(args.analysis_output)
+        print(f"🔍 Automatic analysis enabled - output: {args.analysis_output}")
+    
+    # Configure integrity checking if requested
+    if args.check_integrity:
+        print(f"🔍 Integrity checking enabled - variance threshold: {args.integrity_threshold}")
+    
+    # Configure CPU usage monitoring if requested
+    if args.show_cpu_usage:
+        print(f"💻 CPU usage monitoring enabled")
+    
+    # Configure email notifications if requested
+    if args.email_notification:
+        email_configured = False
+        
+        # Try to load from config file first
+        if args.email_config:
+            try:
+                with open(args.email_config) as f:
+                    email_config = json.load(f)
+                
+                runner.configure_email_notifications(
+                    sender_email=email_config['sender'],
+                    sender_password=email_config['password'],
+                    recipient_emails=email_config['recipients']
+                )
+                email_configured = True
+                print(f"📧 Email notifications enabled from config: {args.email_config}")
+                
+            except Exception as e:
+                print(f"❌ Failed to load email config: {e}")
+        
+        # Try command line arguments
+        elif args.email_sender and args.email_recipients:
+            import getpass
+            
+            password = getpass.getpass("Enter sender email password: ")
+            recipients = [r.strip() for r in args.email_recipients.split(',')]
+            
+            runner.configure_email_notifications(
+                sender_email=args.email_sender,
+                sender_password=password,
+                recipient_emails=recipients
+            )
+            email_configured = True
+            print(f"📧 Email notifications enabled for: {', '.join(recipients)}")
+        
+        if not email_configured:
+            print("⚠️  Email notification requested but not properly configured!")
+            print("   Use --email-config file.json or --email-sender + --email-recipients")
+            print("   Continuing without email notifications...")
     
     if args.list:
         print("Available benchmarks:")
@@ -662,28 +1538,29 @@ def main():
         print("\nProblem sizes:")
         print("=" * 40)
         for size, config in runner.problem_sizes.items():
-            print(f"• {size:8}: grid={config['grid_size']:4d}, iter={config['iterations']:3d}, array={config['array_size']:7d}, fft={config['fft_size']:5d}")
+            print(f"• {size:9}: grid={config['grid_size']:5d}, iter={config['iterations']:4d}, array={config['array_size']:8d}, fft={config['fft_size']:6d}")
         return
     
     # Handle test modes
     if args.full_test:
         thread_counts = [1, 2, 4, 8, 12, 16, 24]
-        iterations = 10
+        iterations = 5
         benchmarks = None  # All benchmarks
-        problem_sizes = ['tiny', 'small', 'medium', 'large', 'huge', 'extreme']
-        print("🔬 Running FULL COMPREHENSIVE TEST")
+        problem_sizes = ['small', 'medium', 'large', 'huge', 'extreme']
+        print("🔬 Running FULL COMPREHENSIVE TEST (ALL NEW SIZES)")
         print(f"   Threads: {thread_counts}")
         print(f"   Sizes: {problem_sizes}")
         print(f"   Iterations: {iterations}")
         total_configs = len(runner.benchmarks) * len(thread_counts) * len(problem_sizes) * iterations
         print(f"   Total runs: {total_configs}")
+        print("⚠️  WARNING: This test includes EXTREME problems (1GB) and may take VERY long!")
         print("💡 Use 'python3 monitor_progress.py' in another terminal to monitor progress")
         print("")
     elif args.quick_test:
-        thread_counts = [1, 2, 4]
+        thread_counts = [1, 2, 4, 8]
         iterations = 3
         benchmarks = None  # All benchmarks
-        problem_sizes = ['tiny', 'small', 'medium']
+        problem_sizes = ['small', 'medium']
         print("⚡ Running QUICK TEST")
         print(f"   Threads: {thread_counts}")
         print(f"   Sizes: {problem_sizes}")
@@ -692,17 +1569,32 @@ def main():
         print(f"   Total runs: {total_configs}")
         print("")
     elif args.stress_test:
-        thread_counts = [1, 2, 4, 8, 16, 24, 32]
-        iterations = 15
+        thread_counts = [1, 2, 4, 8, 16, 24]
+        iterations = 10
         benchmarks = None  # All benchmarks
-        problem_sizes = ['tiny', 'small', 'medium', 'large', 'huge', 'extreme']
+        problem_sizes = ['small', 'medium', 'large', 'huge']
         print("💪 Running STRESS TEST")
         print(f"   Threads: {thread_counts}")
         print(f"   Sizes: {problem_sizes}")
         print(f"   Iterations: {iterations}")
         total_configs = len(runner.benchmarks) * len(thread_counts) * len(problem_sizes) * iterations
         print(f"   Total runs: {total_configs}")
-        print("⚠️  WARNING: This test can take many hours to complete!")
+        print("⚠️  WARNING: This stress test can take several hours to complete!")
+        print("💡 Use 'python3 monitor_progress.py' in another terminal to monitor progress")
+        print("")
+    elif args.extreme_test:
+        thread_counts = [1, 2, 4, 8, 16, 24]
+        iterations = 3
+        benchmarks = None  # All benchmarks
+        problem_sizes = ['huge', 'extreme']
+        print("🚀 Running EXTREME SCALABILITY TEST")
+        print(f"   Threads: {thread_counts}")
+        print(f"   Sizes: {problem_sizes}")
+        print(f"   Iterations: {iterations}")
+        total_configs = len(runner.benchmarks) * len(thread_counts) * len(problem_sizes) * iterations
+        print(f"   Total runs: {total_configs}")
+        print("🔥 WARNING: This test uses HUGE (256MB) and EXTREME (1GB) problems!")
+        print("💾 Ensure you have sufficient RAM and disk space")
         print("💡 Use 'python3 monitor_progress.py' in another terminal to monitor progress")
         print("")
     else:
@@ -710,7 +1602,7 @@ def main():
         if args.threads.lower() == 'auto':
             import multiprocessing
             max_threads = multiprocessing.cpu_count()
-            thread_counts = [1, 2, 4, 8, min(16, max_threads), min(32, max_threads)]
+            thread_counts = [1, 2, 4, 8, min(16, max_threads), min(24, max_threads)]
             thread_counts = sorted(list(set(thread_counts)))  # Remove duplicates
         else:
             thread_counts = [int(x.strip()) for x in args.threads.split(',')]
