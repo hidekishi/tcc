@@ -30,7 +30,7 @@
 #   1) the common rules file: ../../config/commonRules.mk
 #   2) the common compiler configuration file: ../../config/templates/user.cf.mk
 #
-# Copyright (C) 2004, Arturo González Escribano
+# Copyright (C) 2004, Arturo Gonzï¿½lez Escribano
 # Version: 0.2
 #
 
@@ -45,7 +45,7 @@ SHELL=/bin/sh
 #    The name of the main source file, without extension
 #    REMEMBER: .par AND .seq SUFFIXES WILL BE ADDED AUTOMATICALLY
 #
-EXES=c_testPath
+EXES=c_testPath c_testPath_fine c_testPath_coarse
 
 
 # 2. (Optional) DEFINE USER LOCAL FLAGS HERE

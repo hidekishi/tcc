@@ -21,7 +21,7 @@ SHELL=/bin/sh
 #    ( appName_f95 FOR APPLICATIONS DERIVED FROM Fortran95 CODE FILE app.f95 )
 #    REMEMBER: .par AND .seq SUFFIXES WILL BE ADDED AUTOMATICALLY
 #
-EXES=c_mandel
+EXES=c_mandel c_mandel_fine c_mandel_coarse
 
 
 # 2. (Optional) DEFINE USER LOCAL FLAGS HERE

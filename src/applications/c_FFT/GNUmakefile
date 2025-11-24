@@ -21,7 +21,7 @@ SHELL=/bin/sh
 #    ( appName_f95 FOR APPLICATIONS DERIVED FROM Fortran95 CODE FILE app.f95 )
 #    REMEMBER: .par AND .seq SUFFIXES WILL BE ADDED AUTOMATICALLY
 #
-EXES=c_fft
+EXES=c_fft c_fft_fine c_fft_coarse
 
 
 # 2. (Optional) DEFINE USER LOCAL FLAGS HERE

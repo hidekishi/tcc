@@ -1,33 +1,39 @@
-# Build and compiled files
+# Compiled binaries
+bin/*.par.*
+bin/*.seq.*
 *.o
-*.mod
+*.so
+*.a
 *.exe
-*.par.gnu
 
-# Results and logs
-results/
+# Benchmark results
 benchmark_results/
-analysis_output/
-*.log
-*.out
+*.csv
+*.json
 
-# Temporary and backup files
-*~
-*.tmp
-*.bak
-*_backup.py
-*_old.py
-
-# Python cache
+# Python
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
 .pytest_cache/
 
-# Progress and monitoring files
-progress_*.json
-intermediate_results_*.json
+# Logs
+log/
+*.log
 
-# Generated scripts
-benchmark_comprehensive.log
-nohup.out
+# Test directories
+test_*/
+*_test/
+integrity_test*/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

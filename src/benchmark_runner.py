@@ -366,13 +366,15 @@ class BenchmarkRunner:
         self.integrity_threshold = integrity_threshold
         self.show_cpu_usage = show_cpu_usage
         
-        # Problem sizes: 5 distintivos níveis para análise de escalabilidade otimizada
+        # Problem sizes: 5 níveis otimizados para análise de escalabilidade
+        # Tamanhos otimizados para i9-14900K (24 cores, 32 threads) com 128GB RAM
+        # Foco em workloads que estressam paralelização e aproveitam memória disponível
         self.problem_sizes = {
-            'small': {'grid_size': 512, 'iterations': 100, 'array_size': 100000, 'fft_size': 2048},      # ~2MB
-            'medium': {'grid_size': 2048, 'iterations': 500, 'array_size': 1000000, 'fft_size': 8192},   # ~16MB  
-            'large': {'grid_size': 4096, 'iterations': 1000, 'array_size': 4000000, 'fft_size': 32768},  # ~64MB
-            'huge': {'grid_size': 8192, 'iterations': 2000, 'array_size': 16000000, 'fft_size': 131072}, # ~256MB
-            'extreme': {'grid_size': 16384, 'iterations': 4000, 'array_size': 64000000, 'fft_size': 524288} # ~1GB
+            'small': {'grid_size': 2048, 'iterations': 500, 'array_size': 2000000, 'fft_size': 16384},        # ~32 MB
+            'medium': {'grid_size': 4096, 'iterations': 1000, 'array_size': 8000000, 'fft_size': 65536},     # ~128 MB
+            'large': {'grid_size': 8192, 'iterations': 2000, 'array_size': 32000000, 'fft_size': 262144},    # ~512 MB
+            'huge': {'grid_size': 16384, 'iterations': 5000, 'array_size': 128000000, 'fft_size': 1048576},  # ~2 GB
+            'extreme': {'grid_size': 32768, 'iterations': 10000, 'array_size': 512000000, 'fft_size': 4194304} # ~8 GB
         }
         
         # Results storage
@@ -394,107 +396,287 @@ class BenchmarkRunner:
             'c_pi': {
                 'binary': 'bin/c_pi.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
+                    
                     'small': ['-test'],
                     'medium': ['-test'], 
                     'large': ['-test'],
                     'huge': ['-test'],
                     'extreme': ['-test'],
-                    'massive': ['-test'],
-                    'colossal': ['-test'],
-                    'gigantic': ['-test']
+                    
+                    
+                    
                 },
                 'description': 'Pi calculation using numerical integration'
+            },
+            'c_pi_fine': {
+                'binary': 'bin/c_pi_fine.par.gnu',
+                'args_template': {
+                    
+                    'small': ['-test'],
+                    'medium': ['-test'], 
+                    'large': ['-test'],
+                    'huge': ['-test'],
+                    'extreme': ['-test'],
+                    
+                    
+                    
+                },
+                'description': 'Pi calculation - Fine-grained version (dynamic scheduling)'
+            },
+            'c_pi_coarse': {
+                'binary': 'bin/c_pi_coarse.par.gnu',
+                'args_template': {
+                    
+                    'small': ['-test'],
+                    'medium': ['-test'], 
+                    'large': ['-test'],
+                    'huge': ['-test'],
+                    'extreme': ['-test'],
+                    
+                    
+                    
+                },
+                'description': 'Pi calculation - Coarse-grained version (large static chunks)'
             },
             'c_mandel': {
                 'binary': 'bin/c_mandel.par.gnu', 
                 'args_template': {
-                    'tiny': ['-test'],
+                    
                     'small': ['-test'],
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
                     'extreme': ['-test'],
-                    'massive': ['-test'],
-                    'colossal': ['-test'],
-                    'gigantic': ['-test']
+                    
+                    
+                    
                 },
                 'description': 'Mandelbrot set generator'
+            },
+            'c_mandel_fine': {
+                'binary': 'bin/c_mandel_fine.par.gnu', 
+                'args_template': {
+                    
+                    'small': ['-test'],
+                    'medium': ['-test'],
+                    'large': ['-test'],
+                    'huge': ['-test'],
+                    'extreme': ['-test'],
+                    
+                    
+                    
+                },
+                'description': 'Mandelbrot set - Fine-grained (dynamic load balancing)'
+            },
+            'c_mandel_coarse': {
+                'binary': 'bin/c_mandel_coarse.par.gnu', 
+                'args_template': {
+                    
+                    'small': ['-test'],
+                    'medium': ['-test'],
+                    'large': ['-test'],
+                    'huge': ['-test'],
+                    'extreme': ['-test'],
+                    
+                    
+                    
+                },
+                'description': 'Mandelbrot set - Coarse-grained (static large chunks)'
             },
             'c_qsort': {
                 'binary': 'bin/c_qsort.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
+                    
                     'small': ['-test'],
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
                     'extreme': ['-test'],
-                    'massive': ['-test'],
-                    'colossal': ['-test'],
-                    'gigantic': ['-test']
+                    
+                    
+                    
                 },
                 'description': 'Parallel quicksort'
+            },
+            'c_qsort_fine': {
+                'binary': 'bin/c_qsort_fine.par.gnu',
+                'args_template': {
+                    
+                    'small': ['-test'],
+                    'medium': ['-test'],
+                    'large': ['-test'],
+                    'huge': ['-test'],
+                    'extreme': ['-test'],
+                    
+                    
+                    
+                },
+                'description': 'Parallel quicksort - Fine-grained (task cutoff 1k elements)'
+            },
+            'c_qsort_coarse': {
+                'binary': 'bin/c_qsort_coarse.par.gnu',
+                'args_template': {
+                    
+                    'small': ['-test'],
+                    'medium': ['-test'],
+                    'large': ['-test'],
+                    'huge': ['-test'],
+                    'extreme': ['-test'],
+                    
+                    
+                    
+                },
+                'description': 'Parallel quicksort - Coarse-grained (task cutoff 100k elements)'
             },
             'c_fft': {
                 'binary': 'bin/c_fft.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
+                    
                     'small': ['-test'],
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
                     'extreme': ['-test'],
-                    'massive': ['-test'],
-                    'colossal': ['-test'],
-                    'gigantic': ['-test']
+                    
+                    
+                    
                 },
                 'description': 'Fast Fourier Transform'
             },
             'c_fft6': {
                 'binary': 'bin/c_fft6.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
+                    
                     'small': ['-test'],
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
                     'extreme': ['-test'],
-                    'massive': ['-test'],
-                    'colossal': ['-test'],
-                    'gigantic': ['-test']
+                    
+                    
+                    
                 },
                 'description': '6-point FFT implementation'
+            },
+            'c_fft_fine': {
+                'binary': 'bin/c_fft_fine.par.gnu',
+                'args_template': {
+                    
+                    'small': ['-test'],
+                    'medium': ['-test'],
+                    'large': ['-test'],
+                    'huge': ['-test'],
+                    'extreme': ['-test'],
+                    
+                    
+                    
+                },
+                'description': 'Fast Fourier Transform - Fine-grained (cutoff 64, dynamic scheduling)'
+            },
+            'c_fft_coarse': {
+                'binary': 'bin/c_fft_coarse.par.gnu',
+                'args_template': {
+                    
+                    'small': ['-test'],
+                    'medium': ['-test'],
+                    'large': ['-test'],
+                    'huge': ['-test'],
+                    'extreme': ['-test'],
+                    
+                    
+                    
+                },
+                'description': 'Fast Fourier Transform - Coarse-grained (cutoff 4096, static scheduling)'
             },
             'c_md': {
                 'binary': 'bin/c_md.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
+                    
                     'small': ['-test'],
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
                     'extreme': ['-test'],
-                    'massive': ['-test'],
-                    'colossal': ['-test'],
-                    'gigantic': ['-test']
+                    
+                    
+                    
                 },
                 'description': 'Molecular Dynamics simulation'
+            },
+            'c_md_fine': {
+                'binary': 'bin/c_md_fine.par.gnu',
+                'args_template': {
+                    
+                    'small': ['-test'],
+                    'medium': ['-test'],
+                    'large': ['-test'],
+                    'huge': ['-test'],
+                    'extreme': ['-test'],
+                    
+                    
+                    
+                },
+                'description': 'Molecular Dynamics - Fine-grained (dynamic scheduling, chunk 8)'
+            },
+            'c_md_coarse': {
+                'binary': 'bin/c_md_coarse.par.gnu',
+                'args_template': {
+                    
+                    'small': ['-test'],
+                    'medium': ['-test'],
+                    'large': ['-test'],
+                    'huge': ['-test'],
+                    'extreme': ['-test'],
+                    
+                    
+                    
+                },
+                'description': 'Molecular Dynamics - Coarse-grained (static scheduling, large chunks)'
             },
             'c_lu': {
                 'binary': 'bin/c_lu.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
+                    
                     'small': ['-test'],
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
                     'extreme': ['-test'],
-                    'massive': ['-test'],
-                    'colossal': ['-test'],
-                    'gigantic': ['-test']
+                    
+                    
+                    
                 },
                 'description': 'LU decomposition'
+            },
+            'c_lu_fine': {
+                'binary': 'bin/c_lu_fine.par.gnu',
+                'args_template': {
+                    
+                    'small': ['-test'],
+                    'medium': ['-test'],
+                    'large': ['-test'],
+                    'huge': ['-test'],
+                    'extreme': ['-test'],
+                    
+                    
+                    
+                },
+                'description': 'LU decomposition - Fine-grained (dynamic scheduling, chunk 2)'
+            },
+            'c_lu_coarse': {
+                'binary': 'bin/c_lu_coarse.par.gnu',
+                'args_template': {
+                    
+                    'small': ['-test'],
+                    'medium': ['-test'],
+                    'large': ['-test'],
+                    'huge': ['-test'],
+                    'extreme': ['-test'],
+                    
+                    
+                    
+                },
+                'description': 'LU decomposition - Coarse-grained (static scheduling, large chunks)'
             },
             
             # Jacobi solver variants (with configurable problem sizes)
@@ -543,65 +725,127 @@ class BenchmarkRunner:
                 },
                 'description': 'Jacobi iterative solver v3'
             },
+            'c_jacobi_fine': {
+                'binary': 'bin/c_jacobi_fine.par.gnu',
+                'args_template': {
+                    'tiny': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'small': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'medium': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'large': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'huge': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'extreme': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'massive': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'colossal': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'gigantic': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}']
+                },
+                'description': 'Jacobi iterative solver - Fine-grained (dynamic scheduling, chunk 4)'
+            },
+            'c_jacobi_coarse': {
+                'binary': 'bin/c_jacobi_coarse.par.gnu',
+                'args_template': {
+                    'tiny': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'small': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'medium': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'large': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'huge': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'extreme': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'massive': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'colossal': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}'],
+                    'gigantic': ['{grid_size}', '{grid_size}', '0.8', '1.0', '1e-6', '{iterations}']
+                },
+                'description': 'Jacobi iterative solver - Coarse-grained (static scheduling, large chunks)'
+            },
+            
+            # Graph search variants
+            'c_testPath': {
+                'binary': 'bin/c_testPath.par.gnu',
+                'args_template': {                    'small': ['1', '29', 'applications/c_GraphSearch/exampleGraph_01.gph'],
+                    'medium': ['1', '29', 'applications/c_GraphSearch/exampleGraph_01.gph'],
+                    'large': ['1', '29', 'applications/c_GraphSearch/exampleGraph_01.gph'],
+                    'huge': ['1', '29', 'applications/c_GraphSearch/exampleGraph_01.gph'],
+                    'extreme': ['1', '29', 'applications/c_GraphSearch/exampleGraph_01.gph'],
+                },
+                'description': 'Graph path search using workers-farm paradigm'
+            },
+            'c_testPath_fine': {
+                'binary': 'bin/c_testPath_fine.par.gnu',
+                'args_template': {                    'small': ['1', '29', 'applications/c_GraphSearch/exampleGraph_01.gph'],
+                    'medium': ['1', '29', 'applications/c_GraphSearch/exampleGraph_01.gph'],
+                    'large': ['1', '29', 'applications/c_GraphSearch/exampleGraph_01.gph'],
+                    'huge': ['1', '29', 'applications/c_GraphSearch/exampleGraph_01.gph'],
+                    'extreme': ['1', '29', 'applications/c_GraphSearch/exampleGraph_01.gph'],
+                },
+                'description': 'Graph path search - Fine-grained (single node per pool access)'
+            },
+            'c_testPath_coarse': {
+                'binary': 'bin/c_testPath_coarse.par.gnu',
+                'args_template': {                    'small': ['1', '29', 'applications/c_GraphSearch/exampleGraph_01.gph'],
+                    'medium': ['1', '29', 'applications/c_GraphSearch/exampleGraph_01.gph'],
+                    'large': ['1', '29', 'applications/c_GraphSearch/exampleGraph_01.gph'],
+                    'huge': ['1', '29', 'applications/c_GraphSearch/exampleGraph_01.gph'],
+                    'extreme': ['1', '29', 'applications/c_GraphSearch/exampleGraph_01.gph'],
+                },
+                'description': 'Graph path search - Coarse-grained (batch of 10 nodes per pool access)'
+            },
             
             # Loop dependency examples (correct implementations)
             'c_loopA_sol1': {
                 'binary': 'bin/c_loopA.solution1.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
+                    
                     'small': ['-test'],
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
                     'extreme': ['-test'],
-                    'massive': ['-test'],
-                    'colossal': ['-test'],
-                    'gigantic': ['-test']
+                    
+                    
+                    
                 },
                 'description': 'Loop A dependency - Solution 1'
             },
             'c_loopA_sol2': {
                 'binary': 'bin/c_loopA.solution2.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
+                    
                     'small': ['-test'],
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
                     'extreme': ['-test'],
-                    'massive': ['-test'],
-                    'colossal': ['-test'],
-                    'gigantic': ['-test']
+                    
+                    
+                    
                 },
                 'description': 'Loop A dependency - Solution 2'
             },
             'c_loopA_sol3': {
                 'binary': 'bin/c_loopA.solution3.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
+                    
                     'small': ['-test'],
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
                     'extreme': ['-test'],
-                    'massive': ['-test'],
-                    'colossal': ['-test'],
-                    'gigantic': ['-test']
+                    
+                    
+                    
                 },
                 'description': 'Loop A dependency - Solution 3'
             },
             'c_loopB_pipeline': {
                 'binary': 'bin/c_loopB.pipelineSolution.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
+                    
                     'small': ['-test'],
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
                     'extreme': ['-test'],
-                    'massive': ['-test'],
-                    'colossal': ['-test'],
-                    'gigantic': ['-test']
+                    
+                    
+                    
                 },
                 'description': 'Loop B dependency - Pipeline Solution'
             },
@@ -610,52 +854,52 @@ class BenchmarkRunner:
             'c_loopA_bad': {
                 'binary': 'bin/c_loopA.badSolution.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
+                    
                     'small': ['-test'],
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
                     'extreme': ['-test'],
-                    'massive': ['-test'],
-                    'colossal': ['-test'],
-                    'gigantic': ['-test']
+                    
+                    
+                    
                 },
                 'description': 'Loop A dependency - Bad Solution (has races)'
             },
             'c_loopB_bad1': {
                 'binary': 'bin/c_loopB.badSolution1.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
+                    
                     'small': ['-test'],
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
                     'extreme': ['-test'],
-                    'massive': ['-test'],
-                    'colossal': ['-test'],
-                    'gigantic': ['-test']
+                    
+                    
+                    
                 },
                 'description': 'Loop B dependency - Bad Solution 1 (has races)'
             },
             'c_loopB_bad2': {
                 'binary': 'bin/c_loopB.badSolution2.par.gnu',
                 'args_template': {
-                    'tiny': ['-test'],
+                    
                     'small': ['-test'],
                     'medium': ['-test'],
                     'large': ['-test'],
                     'huge': ['-test'],
                     'extreme': ['-test'],
-                    'massive': ['-test'],
-                    'colossal': ['-test'],
-                    'gigantic': ['-test']
+                    
+                    
+                    
                 },
                 'description': 'Loop B dependency - Bad Solution 2 (has races)'
             }
         }
         
-        # Default thread counts to test (max 24 threads available)
-        self.default_threads = [1, 2, 4, 8, 16, 24]
+        # Default thread counts to test (updated to include 32 threads)
+        self.default_threads = [1, 2, 4, 8, 16, 24, 32]
     
     def enable_auto_analysis(self, analysis_output_dir="analysis_output"):
         """Enable automatic analysis after benchmark completion"""
@@ -1419,14 +1663,22 @@ Analysis Results:
                         perf_data[key] = []
                     perf_data[key].append(result['wall_time'])
                 
-                f.write("Benchmark                Size     Threads  Avg Time (s)  Min Time (s)  Max Time (s)\n")
-                f.write("-" * 80 + "\n")
+                f.write("Benchmark                Size     Threads  Avg Time (s)  Std Dev (s)  Min Time (s)  Max Time (s)\n")
+                f.write("-" * 95 + "\n")
                 
                 for (benchmark, problem_size, threads), times in sorted(perf_data.items()):
                     avg_time = sum(times) / len(times)
                     min_time = min(times)
                     max_time = max(times)
-                    f.write(f"{benchmark:20} {problem_size:8} {threads:8d} {avg_time:11.3f} {min_time:11.3f} {max_time:11.3f}\n")
+                    
+                    # Calculate standard deviation
+                    if len(times) > 1:
+                        variance = sum((t - avg_time) ** 2 for t in times) / len(times)
+                        std_dev = variance ** 0.5
+                    else:
+                        std_dev = 0.0
+                    
+                    f.write(f"{benchmark:20} {problem_size:8} {threads:8d} {avg_time:11.3f} {std_dev:11.3f} {min_time:11.3f} {max_time:11.3f}\n")
         
         return summary_file
 

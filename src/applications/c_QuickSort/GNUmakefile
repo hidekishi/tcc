@@ -21,7 +21,7 @@ SHELL=/bin/sh
 #    ( appName_f95 FOR APPLICATIONS DERIVED FROM Fortran95 CODE FILE app.f95 )
 #    REMEMBER: .par AND .seq SUFFIXES WILL BE ADDED AUTOMATICALLY
 #
-EXES=c_qsort
+EXES=c_qsort c_qsort_fine c_qsort_coarse
 
 
 # 2. (Optional) DEFINE USER LOCAL FLAGS HERE
