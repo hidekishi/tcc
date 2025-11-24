@@ -367,33 +367,33 @@ class BenchmarkRunner:
         self.show_cpu_usage = show_cpu_usage
         
         # Problem sizes: 5 níveis otimizados para análise de escalabilidade
-        # Tamanhos otimizados para i9-14900K (24 cores, 32 threads) com 128GB RAM
-        # Foco em workloads que estressam paralelização e aproveitam memória disponível
+        # Tamanhos otimizados para execução rápida com boa escalabilidade
+        # Foco em completar full-test em tempo razoável (~6-8 horas)
         self.problem_sizes = {
             # grid_size: Jacobi/iterative solvers | iterations: loop iterations
             # array_size: Pi/Mandelbrot points | fft_size: FFT problem size
             # md_particles/md_steps: Molecular Dynamics | qsort_size: QuickSort size in KB
             # fft_size_kb: FFT size in KB | lu_size: LU matrix size
             'small': {
-                'grid_size': 2048, 'iterations': 500, 'array_size': 2000000, 'fft_size': 16384,
-                'md_particles': 8192, 'md_steps': 50, 'qsort_size': 2000, 'fft_size_kb': 16, 'lu_size': 512
-            },        # ~32 MB
+                'grid_size': 512, 'iterations': 100, 'array_size': 200000, 'fft_size': 4096,
+                'md_particles': 2048, 'md_steps': 10, 'qsort_size': 200, 'fft_size_kb': 4, 'lu_size': 128
+            },        # ~2 MB - 20-30 seg/thread
             'medium': {
-                'grid_size': 4096, 'iterations': 1000, 'array_size': 8000000, 'fft_size': 65536,
-                'md_particles': 16384, 'md_steps': 100, 'qsort_size': 8000, 'fft_size_kb': 64, 'lu_size': 1024
-            },     # ~128 MB
+                'grid_size': 1024, 'iterations': 200, 'array_size': 800000, 'fft_size': 8192,
+                'md_particles': 4096, 'md_steps': 25, 'qsort_size': 800, 'fft_size_kb': 8, 'lu_size': 256
+            },     # ~8 MB - 1-2 min/thread
             'large': {
-                'grid_size': 8192, 'iterations': 2000, 'array_size': 32000000, 'fft_size': 262144,
-                'md_particles': 32768, 'md_steps': 200, 'qsort_size': 32000, 'fft_size_kb': 256, 'lu_size': 2048
-            },    # ~512 MB
+                'grid_size': 2048, 'iterations': 400, 'array_size': 3200000, 'fft_size': 16384,
+                'md_particles': 8192, 'md_steps': 50, 'qsort_size': 3200, 'fft_size_kb': 16, 'lu_size': 512
+            },    # ~32 MB - 5-8 min/thread
             'huge': {
-                'grid_size': 16384, 'iterations': 5000, 'array_size': 128000000, 'fft_size': 1048576,
-                'md_particles': 65536, 'md_steps': 500, 'qsort_size': 128000, 'fft_size_kb': 1024, 'lu_size': 4096
-            },  # ~2 GB
+                'grid_size': 4096, 'iterations': 800, 'array_size': 12800000, 'fft_size': 65536,
+                'md_particles': 16384, 'md_steps': 100, 'qsort_size': 12800, 'fft_size_kb': 64, 'lu_size': 1024
+            },  # ~128 MB - 20-30 min/thread
             'extreme': {
-                'grid_size': 32768, 'iterations': 10000, 'array_size': 512000000, 'fft_size': 4194304,
-                'md_particles': 131072, 'md_steps': 1000, 'qsort_size': 512000, 'fft_size_kb': 4096, 'lu_size': 8192
-            } # ~8 GB
+                'grid_size': 8192, 'iterations': 1600, 'array_size': 51200000, 'fft_size': 262144,
+                'md_particles': 32768, 'md_steps': 200, 'qsort_size': 51200, 'fft_size_kb': 256, 'lu_size': 2048
+            } # ~512 MB - 1-2 horas/thread
         }
         
         # Results storage
@@ -1710,7 +1710,9 @@ def main():
                 runner.configure_email_notifications(
                     sender_email=email_config['sender'],
                     sender_password=email_config['password'],
-                    recipient_emails=email_config['recipients']
+                    recipient_emails=email_config['recipients'],
+                    smtp_server=email_config.get('smtp_server', 'smtp.gmail.com'),
+                    smtp_port=email_config.get('smtp_port', 587)
                 )
                 email_configured = True
                 print(f"📧 Email notifications enabled from config: {args.email_config}")
