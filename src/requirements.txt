@@ -20,3 +20,7 @@
 numpy>=1.19.0
 pandas>=1.3.0
 matplotlib>=3.3.0
+
+# Required for CPU monitoring and Gist upload:
+psutil>=5.8.0
+requests>=2.25.0
