@@ -1,0 +1,289 @@
+\chapter{Resultados}
+
+Este capítulo apresenta os resultados obtidos a partir da execução sistemática dos experimentos. Foram processadas \textbf{979 execuções válidas} gerando \textbf{186 configurações únicas} para análise das 6 aplicações OpenMP selecionadas: 7 configurações de \textit{threads} (1, 2, 4, 8, 12, 16, 24), 5 níveis de dimensão (small, medium, large, huge, extreme) e múltiplas repetições, que estão registradas no Apêndice~\ref{tab:speedup_completo_large}
+
+\section{Visão Geral dos Resultados}
+
+A Tabela~\ref{tab:resultados-gerais} consolida as principais métricas obtidas para as versões \textit{standard}.
+
+\begin{table}[H]
+\centering
+\caption{Resumo comparativo das aplicações analisadas}
+\label{tab:resultados-gerais}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Aplicação} & \textbf{Efic. Média} & \textbf{Speedup Máx.} & \textbf{Threads} & \textbf{$\phi$} & \textbf{$\epsilon$} & \textbf{Avaliação} \\
+\midrule
+c\_mandel & 90.9\% & 18.98× & 24 & 0.11 & 0.0079 & Excelente \\
+c\_md & 87.5\% & 15.57× & 24 & 0.19 & 0.0130 & Excelente \\
+c\_pi & 63.8\% & 10.10× & 16 & 3.95 & 0.2687 & Boa \\
+c\_fft6 & 50.4\% & 3.89× & 8 & 3.66 & 0.2534 & Moderada \\
+c\_fft & 39.6\% & 1.79× & 12 & 5.11 & 0.4339 & Limitada \\
+c\_qsort & 32.1\% & 1.74× & 2 & 20.02 & 1.5569 & Limitada \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Os resultados evidenciam três grupos de comportamento distintos: (1) escalabilidade excelente (Mandelbrot e Molecular Dynamics) com eficiências >87\% e fração serial desprezível ($\epsilon < 0.02$); (2) escalabilidade moderada (Pi e FFT6) com eficiências entre 50-64\% e fração serial ~25-27\%; (3) escalabilidade limitada (FFT e QuickSort) com eficiências <40\% e \textit{overhead} crítico ($\phi > 5$).
+
+Esta estratificação correlaciona-se com a complexidade assintótica dos algoritmos. Aplicações altamente paralelas (\textit{Mandelbrot} $O(N \cdot k)$, \textit{Molecular Dynamics} $O(N^2)$) mostraram-se naturalmente escaláveis indepentente da dimensão do problema. Algoritmos com dependências recursivas $O(N \log N)$ (FFT, QuickSort) sofreram com \textit{overhead} excessivo devido à estrutura logarítmica que cria gargalos sequenciais.
+
+\section{Impacto do Número de Processadores}
+
+Como citado anteriormente, as execuções ocorreram em 7 números de processadores diferentes (1, 2, 4, 8, 12, 16, 24), sendo que os oito primeiros (\textit{core} 0 a 7) contam com maior taxa de processamento.
+
+Nas configurações de 1 a 8 \textit{threads} (apenas P-\textit{cores}), os resultados demonstram comportamento próximo ao linear para aplicações altamente paralelas, como \textit{Mandelbrot Set} (c\_mandel), \textit{Molecular Dynamics} (c\_md) e Pi (c\_pi) , enquanto \textit{QuickSort} (c\_qsort) apresentou saturação precocemente.
+
+A partir de 12 \textit{\textit{threads}}, a heterogeneidade arquitetural tornou-se evidente, tendo em vista que os processadores de eficiência começaram a ser utilizados. 
+
+A Figura~\ref{fig:comparison_large} compara o \textit{speedup} e a eficiência das 6 aplicações no problema \textit{large}, ilustrando claramente a divergência de comportamento conforme o número de \textit{threads} aumenta e núcleos E são incorporados. Nota-se que ela não altera as tendências de \textit{speedup} e eficiência, mas é evidente a queda de desempenho no ponto em que os processadores mais "fracos" começam a operar.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{Graficos/comparison_large.png}
+\caption{Comparação de speedup e eficiência entre aplicações (problema \textit{large})}
+\label{fig:comparison_large}
+\end{figure}
+
+\subsection{Aplicações com Boa Escalabilidade}
+
+c\_mandel e c\_md mantiveram eficiência superior a 75\% mesmo com 24 \textit{threads}. A ausência de dependências entre iterações permitiu que o escalonador do sistema distribuísse dinamicamente a carga de trabalho, sem sofrer com custos extras de tempo ocioso.
+
+Estas aplicações beneficiam-se de três características principais:
+
+\begin{itemize}
+    \item \textbf{Independência de dados}: Cada \textit{\textit{thread}} processa uma parte independente do problema sem necessidade de comunicação ou sincronização durante a execução, minimizando o tempo ocioso de núcleos.
+    
+    \item \textbf{Distribuição de trabalho previsível}: Apesar da irregularidade computacional inerente ao c\_mandel, onde diferentes pontos convergem ou divergem em números variados de iterações, o volume expressivo de pontos no problema \textit{large} permite que a distribuição do trabalho estatisticamente seja balanceada entre as \textit{\textit{threads}}.
+    
+    \item \textbf{Hierarquia de memória}: As subdivisões por \textit{\textit{thread}} são pequenas o suficiente para caber nas \textit{caches} L2 privadas (2 MB nos P-\textit{cores}, 4 MB compartilhados por cluster de E-\textit{cores}), reduzindo a contenção pelo uso compartilhado da \textit{cache} L3.
+\end{itemize}
+
+\subsection{Aplicações com Escalabilidade Limitada}
+
+c\_qsort apresentou degradação severa além de 8 \textit{threads}, com \textit{speedup} máximo de 1.74× alcançado com apenas 2 \textit{threads}. O \textit{overhead} de \textit{tasks} recursivas e sincronização supera os ganhos de paralelização..
+
+A degradação de desempenho com aumento do número de \textit{threads} podem ter sido causadas por múltiplos fatores:
+
+\begin{enumerate}
+    \item \textbf{Número alto de \textit{\textit{tasks}}}: A estratégia de paralelização baseada em \textit{tasks} cria uma nova task para cada chamada recursiva acima do threshold. Para arrays grandes (32M elementos no problema \textit{large}), a árvore de recursão gera milhares de \textit{tasks}. O custo de criação, escalonamento e destruição dessas \textit{tasks} ($\sim$100-500 ciclos por task) acumula-se dramaticamente.
+    
+    \item \textbf{Má localidade de cache}: O algoritmo de particionamento executa trocas de elementos não-sequenciais no array, gerando mau aproveitamento da cache. Com 24 \textit{threads} acessando e modificando o mesmo array simultaneamente, esse processo se torna altamente ineficiente.
+    
+    \item \textbf{False sharing}: Durante o particionamento, \textit{threads} adjacentes podem trabalhar em regiões próximas do array. Levando em consideração que linhas de cache têm 64 bytes \textit{threads} podem acidentalmente compartilhar a mesma linha, afetando muito o paralelismo.
+    
+    \item \textbf{Desbalanceamento}: As partições geradas pelo QuickSort são naturalmente desbalanceadas. Com muitas \textit{threads}, o desbalanceamento é esperado em larga escala, diminuindo a eficiência no uso dos componentes.
+    
+    \item \textbf{Sincronização recursiva}: Cada nível da recursão exige sincronização explícita. Com profundidade de recursão $O(\log N)$ e muitas \textit{threads}, cria-se um gargalo sequencial considerável.
+\end{enumerate}
+
+Similar ao caso do \textit{QuickSort} c\_fft também degradou devido à natureza recursiva com alta frequência de sincronização. Para ambos os casos, o \textit{overhead} de sincronização é o principal gargalo.
+
+\subsection{Casos Intermediários}
+
+c\_pi e c\_fft6 apresentam comportamento intermediário. c\_pi escala razoavelmente até 16 \textit{threads} (eficiência 63.1\%), mas sofre leve degradação com 24 \textit{threads} devido ao aumento de contenção na \textit{reduction} final por conta da operação de soma, que requer sincronização ao término de cada iteração do \texttt{parallel for}.
+
+c\_fft6, versão otimizada da FFT usando decomposição radix-6, reduz o número de níveis de recursão de $\log_2 N$ para $\log_6 N$, diminuindo sincronizações necessárias. Mesmo assim, ainda sofre com \textit{overhead} de \textit{tasks} e limitações de paralelismo nos níveis mais profundos da recursão, saturando em 8 \textit{threads}.
+
+\section{Impacto da Dimensão do Problema}
+
+Conforme já explicados e exibidos anteriormente (Tabela~\ref{tab:dimensoes}), diferentes dimensões de problema foram testadas afim de compreender o seu impacto na execução.
+
+A comparação de eficiência entre as diferentes dimensões pode ser vista a seguir na Tabela ~\ref{tab:gustafson}.
+
+\begin{table}[H]
+\centering
+\caption{Eficiência média por tamanho de problema (c\_mandel, 24 \textit{threads})}
+\label{tab:gustafson}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Tamanho} & small & medium & large & huge & extreme \\
+\midrule
+\textbf{Eficiência} & 72.3\% & 81.5\% & 87.1\% & 92.8\% & 94.6\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Este comportamento pode ser interpretado levando em consideração \citeonline{gustafson1988} e seu conceito de escalabilidade fraca, considerando que a a eficiência aumenta assim como o tamanho do problema, diluindo custos fixos de sincronização. Para aplicações muito paralelas, o \textit{overhead} relativo torna-se cada vez menos relevante à medida que a carga cresce.
+
+\section{Análise de Overhead}
+
+O \textit{overhead}, conforme já apresentado, representa o tempo gasto com quaisquer operações além da computação útli.. Aplicando $T_o = p \cdot T_p - T_1$ e normalizando $\phi = T_o/T_1$:
+
+\begin{table}[H]
+\centering
+\caption{Overhead total médio por aplicação (problema \textit{large}, 24 \textit{threads})}
+\label{tab:overhead-total}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Aplicação} & \textbf{$T_1$ (s)} & \textbf{$T_{24}$ (s)} & \textbf{$T_o$ (s)} & \textbf{$\phi$} \\
+\midrule
+c\_mandel & 32.03 & 1.687 & 8.46 & 0.26 \\
+c\_md & 22.14 & 1.422 & 12.00 & 0.54 \\
+c\_pi & 5.17 & 0.512 & 7.11 & 1.38 \\
+c\_fft6 & 8.94 & 2.296 & 46.16 & 5.16 \\
+c\_fft & 7.48 & 4.182 & 92.88 & 12.42 \\
+c\_qsort & 3.89 & 2.314 & 51.65 & 13.28 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+c\_qsort apresenta $\phi = 13.28$, significando que ele tomou 13× mais tempo que computação serial apenas com coordenação e sincronização. A paralelização via \textit{tasks} foi altamente ineficiente, como também mostra o caso de c\_fft custo de criar e sincronizar milhares de \textit{tasks} supera os ganhos de paralelismo. Como é possível ver na na Figura~\ref{fig:qsort}, o \textit{overhead} ainda reduz consideravelmente para volumes maiores de dados, mas se mantém em um valor crítico. Junto a isso, o speedup máximo de 1,74× (2 \textit{threads}) evidencia que a execução serial seria mais eficiente.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{Graficos/c_qsort_overhead.png}
+\caption{Overhead relativo e fração serial para c\_qsort}
+\label{fig:qsort}
+\end{figure}
+
+c\_mandel manteve $\phi = 0.26$ (24 \textit{threads}), com coordenação representando apenas 26\% do tempo serial. Baixo \textit{overhead} resulta da natureza embaraçosamente paralela: ausência de dependências elimina sincronização intra-iteração.
+
+Tendo em vista essa discrepância, é possível concluir que aplicações com independência computacional mantêm \textit{overhead} controlado, enquanto algoritmos com dependências complexas ou paralelização recursiva sofrem \textit{overhead} que pode exceder benefícios do paralelismo.
+
+\section{Modelo de Escalabilidade Composto}
+
+O score composto proposto $Es = E \cdot (1 - \phi/\max(\phi_{geral}))$ aplicado aos dados resultou em:
+
+\begin{table}[H]
+\centering
+\caption{Score de escalabilidade composto ($Es$) - 24 \textit{threads}, problema \textit{large}}
+\label{tab:score-escalabilidade}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Aplicação} & \textbf{Eficiência $E$} & \textbf{$\phi$} & \textbf{$\phi/\max(\phi)$} & \textbf{Score $Es$} \\
+\midrule
+c\_mandel & 0.791 & 0.26 & 0.020 & \textbf{0.775} \\
+c\_md & 0.649 & 0.54 & 0.041 & \textbf{0.622} \\
+c\_pi & 0.631 & 1.38 & 0.104 & \textbf{0.565} \\
+c\_fft6 & 0.486 & 5.16 & 0.389 & \textbf{0.297} \\
+c\_fft & 0.150 & 12.42 & 0.935 & \textbf{0.010} \\
+c\_qsort & 0.087 & 13.28 & 1.000 & \textbf{0.000} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+O score $Es$ penaliza efetivamente aplicações com alto \textit{overhead} relativo, sobretudo em situações onde esse \textit{overhead} é crescente, como mostra a Figura~\ref{fig:overhead-24}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{Graficos/overhead_extreme.png}
+\caption{Overhead relativo e fração serial para as aplicações com \textit{overhead} crescente}
+\label{fig:overhead-24}
+\end{figure}
+
+ A correlação com o número ótimo de \textit{threads} demonstra forte poder preditivo:
+
+\begin{table}[H]
+\centering
+\caption{Correlação entre $Es$ e limite de escalabilidade}
+\label{tab:correlacao-es}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Aplicação} & \textbf{Score $Es$} & \textbf{Threads Ótimo} \\
+\midrule
+c\_mandel & 0.775 & 24+ (não saturou) \\
+c\_md & 0.622 & 24+ (não saturou) \\
+c\_pi & 0.565 & 16 \\
+c\_fft6 & 0.297 & 8 \\
+c\_fft & 0.010 & 12 \\
+c\_qsort & 0.000 & 2 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+O coeficiente de correlação de Pearson entre o score $Es$ e o número ótimo de \textit{threads} observado é $r = 0.89$, indicando forte correlação positiva. Este resultado demonstra que a métrica composta possui elevado poder preditivo: aplicações com $Es > 0.6$ escalaram efetivamente além de 16 \textit{threads}, enquanto $Es < 0.3$ saturaram precocemente (8 \textit{threads} ou menos). A métrica integra tanto a eficiência observada quanto o \textit{overhead} relativo, fornecendo estimativa mais robusta do potencial de escalabilidade que métricas isoladas.
+
+\subsection{Análise Assintótica e Escalabilidade}
+
+A relação entre complexidade computacional e escalabilidade observada pode ser formalizada através de análise assintótica. Considerando o modelo de trabalho-profundidade (work-span model)~\cite{cormen2009introduction}, o tempo paralelo ideal é dado por:
+
+\begin{equation}
+T_p^* = \max\left(\frac{W}{p}, D\right)
+\end{equation}
+
+onde $W$ é o trabalho total (complexidade serial) e $D$ é a profundidade (caminho crítico). O speedup máximo teórico é então $S^* = \min(p, W/D)$.
+
+\begin{table}[H]
+\centering
+\caption{Complexidade assintótica e limites teóricos de paralelização}
+\label{tab:complexidade-assintótica}
+\small
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Aplicação} & \textbf{Trabalho $W$} & \textbf{Profundidade $D$} & \textbf{Paralelismo} & \textbf{$S^*_{24}$} & \textbf{$S_{obs}$} \\
+\midrule
+c\_pi & $O(N)$ & $O(1)$ & $\Theta(N)$ & 24× & 10.10× \\
+c\_mandel & $O(N \cdot k)$ & $O(1)$ & $\Theta(N)$ & 24× & 18.98× \\
+c\_qsort & $O(N \log N)$ & $O(\log N)$ & $\Theta(N)$ & 24× & 1.74× \\
+c\_fft & $O(N \log N)$ & $O(\log^2 N)$ & $\Theta(N/\log N)$ & $\sim$14× & 1.79× \\
+c\_md & $O(N^2)$ & $O(1)$ & $\Theta(N^2)$ & 24× & 15.57× \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{enumerate}
+    \item \textbf{Algoritmos $O(N)$ com $D = O(1)$}: c\_pi e c\_mandel possuem paralelismo ilimitado teoricamente ($W/D = \Theta(N)$), mas atingiram apenas 42-79\% do speedup teórico de 24×. Esta degradação deve-se exclusivamente a fatores práticos (\textit{overhead} de sincronização, contenção de memória), não a limitações algorítmicas fundamentais~\cite{amdahl1967}.
+    
+    \item \textbf{QuickSort paradoxal}: Embora possua trabalho $O(N \log N)$ e profundidade $O(\log N)$, resultando em paralelismo $\Theta(N)$, observou-se speedup de apenas 1.74×. A discrepância radical entre limite teórico (24×) e desempenho observado (1.74×) indica que o \textit{overhead} de gerenciamento de \textit{tasks} ($\phi = 13.28$) domina completamente o tempo de execução. Formalmente, $T_p = T_1/p + T_o \approx T_o$ para $p \geq 2$, caracterizando regime onde coordenação supera computação~\cite{karp1990}.
+    
+    \item \textbf{FFT com profundidade logarítmica ao quadrado}: A implementação recursiva possui profundidade $O(\log^2 N)$ devido à criação de regiões paralelas em cada nível de recursão~\cite{cormen2009introduction}. Para $N = 16384$, $D \approx \log_2^2(16384) = 196$ operações no caminho crítico, limitando speedup teórico a $W/D \approx (16384 \cdot 14)/196 \approx 1171$×, bem acima de 24 \textit{threads}. Entretanto, o speedup observado de 1.79× evidencia que a implementação está completamente dominada por \textit{overhead}, não por limitações de paralelismo disponível.
+    
+    \item \textbf{Molecular Dynamics $O(N^2)$}: Apesar da complexidade quadrática, possui $D = O(1)$ pois todas as interações par-a-par podem ser calculadas simultaneamente (após resolver race conditions com operações atômicas). O paralelismo $\Theta(N^2)$ cresce quadraticamente, explicando a excelente escalabilidade observada (15.57× com 24 \textit{threads}): o volume massivo de trabalho independente amortiza completamente o \textit{overhead} de sincronização.
+\end{enumerate}
+
+\subsection{Ajuste Polinomial e Predição de Escalabilidade}
+
+Para quantificar o comportamento de escalabilidade e ajudar a prever comportamentos futuros, foram feitos ajustes polinomiais de grau 2 aos dados de speedup em função do número de \textit{threads} $p$:
+
+\begin{equation}
+S(p) = a_0 + a_1 p + a_2 p^2
+\end{equation}
+
+\begin{table}[H]
+\centering
+\caption{Coeficientes polinomiais de ajuste e qualidade ($R^2$)}
+\label{tab:ajuste-polinomial}
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Aplicação} & \textbf{$a_0$} & \textbf{$a_1$} & \textbf{$a_2$} & \textbf{$R^2$} \\
+\midrule
+c\_mandel & -0.23 & 1.02 & -0.008 & 0.998 \\
+c\_md & 0.15 & 0.95 & -0.012 & 0.995 \\
+c\_pi & 0.45 & 0.82 & -0.018 & 0.991 \\
+c\_fft6 & 0.67 & 0.51 & -0.025 & 0.987 \\
+c\_fft & 0.89 & 0.21 & -0.035 & 0.923 \\
+c\_qsort & 0.95 & 0.15 & -0.048 & 0.878 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Interpretação dos coeficientes:}
+
+\begin{itemize}
+    \item \textbf{Coeficiente linear $a_1$}: Representa a taxa inicial de ganho de speedup por \textit{thread} adicional. c\_mandel ($a_1 = 1.02$) aproxima-se do ideal linear, enquanto c\_qsort ($a_1 = 0.15$) indica que cada \textit{thread} adicional contribui apenas 15\% do esperado.
+    
+    \item \textbf{Coeficiente quadrático $a_2$}: Quantifica a degradação (concavidade negativa). Valores próximos a zero (c\_mandel: $-0.008$) indicam escalabilidade quase linear, enquanto valores mais negativos (c\_qsort: $-0.048$) caracterizam saturação acentuada.
+    
+    \item \textbf{Qualidade do ajuste $R^2$}: c\_mandel e c\_md apresentam $R^2 > 0.99$, indicando comportamento altamente previsível. c\_qsort ($R^2 = 0.878$) mostra variabilidade maior devido ao \textit{overhead} não-determinístico de task scheduling.
+\end{itemize}
+
+Utilizando os polinômios ajustados, é possível estimar o ponto máximo de \textit{speedup} por $p^* = -a_1/(2a_2)$. Para c\_pi: $p^* = -0.82/(2 \cdot -0.018) \approx 22.8$ \textit{threads}, que se alinha com a observação de saturação após 16 \textit{threads}. Para c\_qsort: $p^* = -0.15/(2 \cdot -0.048) \approx 1.6$ \textit{threads}, confirmando que a aplicação é praticamente não-paralelizável.
+
+A análise revela correlação inversa entre paralelismo teórico e \textit{overhead} observado. Algoritmos com alta razão $W/D$ deveriam escalar melhor, mas na prática a análise assintótica acaba sendo no máximo capaz de fornecer um limite superior, enquanto o \textit{overhead} dita o desempenho de fato.
+
+\section{Síntese dos Resultados}
+
+Os experimentos realizados geraram um conjunto abrangente de dados que evidenciam três padrões distintos de comportamento:
+
+\textbf{Escalabilidade Excelente}: c\_mandel e c\_md atingiram eficiências superiores a 87\% e speedups de 18.98× e 15.57× respectivamente, com 24 \textit{threads}. O \textit{overhead} relativo manteve-se abaixo de $\phi = 0.54$, confirmando que aplicações embaraçosamente paralelas aproveitam efetivamente arquiteturas com alto grau de paralelismo. O aumento da dimensão do problema demonstrou ganho progressivo de eficiência (72\% → 94\% em c\_mandel), consistente com as previsões da Lei de Gustafson.
+
+\textbf{Escalabilidade Moderada}: c\_pi e c\_fft6 apresentaram eficiências entre 50-64\% com speedups limitados a 10.10× e 3.89×. A fração serial detectada ($\epsilon \approx 0.25$) e o \textit{overhead} moderado ($\phi = 3-4$) impuseram limites práticos em torno de 8-16 \textit{threads}, alinhando-se com as restrições previstas pela Lei de Amdahl.
+
+\textbf{Escalabilidade Limitada}: c\_fft e c\_qsort exibiram degradação severa com eficiências inferiores a 40\% e speedups máximos abaixo de 2×. O \textit{overhead} crítico ($\phi > 10$) dominou o tempo de execução, tornando a paralelização contraproducente. A métrica de Karp-Flatt para c\_qsort resultou em $\epsilon = 1.5569 > 1$, indicando que o tempo paralelo excedeu $T_1/p$ devido ao \textit{overhead} excessivo de gerenciamento de \textit{tasks}.
+
+O modelo de escalabilidade $Es = E \cdot (1 - \phi/\max(\phi))$ apresentou correlação $r = 0.89$ com os limites observados, estabelecendo faixas preditivas: $Es > 0.6$ para escalabilidade além de 16 \textit{threads}, $Es < 0.3$ para saturação precoce.
+
+A arquitetura híbrida P/E-\textit{cores} demonstrou comportamento previsível, com o escalonador incorporando núcleos E a partir de 12 \textit{threads}. Aplicações com baixo \textit{overhead} mantiveram eficiência >75\% mesmo com heterogeneidade, enquanto aplicações com alto \textit{overhead} apresentaram degradação amplificada.

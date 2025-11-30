@@ -463,26 +463,27 @@ class BenchmarkRunner:
             # array_size: Pi/Mandelbrot points | fft_size: FFT problem size
             # md_particles/md_steps: Molecular Dynamics | qsort_size: QuickSort size in KB
             # fft_size_kb: FFT size in KB | lu_size: LU matrix size
+            # ADJUSTED: Further reduced mandel and md for viable runtimes
             'small': {
-                'grid_size': 256, 'iterations': 50, 'array_size': 100000, 'fft_size': 2048,
-                'md_particles': 1024, 'md_steps': 5, 'qsort_size': 100, 'fft_size_kb': 2, 'lu_size': 64
+                'grid_size': 256, 'iterations': 50, 'array_size': 200000, 'fft_size': 2048,
+                'md_particles': 1024, 'md_steps': 5, 'qsort_size': 150, 'fft_size_kb': 4, 'lu_size': 96
             },        # ~0.5 MB - 5-10 seg/thread
             'medium': {
-                'grid_size': 1024, 'iterations': 200, 'array_size': 1000000, 'fft_size': 8192,
-                'md_particles': 4096, 'md_steps': 20, 'qsort_size': 1000, 'fft_size_kb': 8, 'lu_size': 256
-            },     # ~8 MB - 1-2 min/thread (10x small)
+                'grid_size': 1024, 'iterations': 200, 'array_size': 300000, 'fft_size': 8192,
+                'md_particles': 2048, 'md_steps': 10, 'qsort_size': 1500, 'fft_size_kb': 16, 'lu_size': 384
+            },     # ~8 MB - 30-60 sec/thread (mandel 300k, md reduced 50%)
             'large': {
-                'grid_size': 3072, 'iterations': 600, 'array_size': 10000000, 'fft_size': 32768,
-                'md_particles': 12288, 'md_steps': 50, 'qsort_size': 10000, 'fft_size_kb': 32, 'lu_size': 768
-            },    # ~80 MB - 8-12 min/thread (10x medium)
+                'grid_size': 3072, 'iterations': 600, 'array_size': 500000, 'fft_size': 32768,
+                'md_particles': 4096, 'md_steps': 20, 'qsort_size': 15000, 'fft_size_kb': 64, 'lu_size': 1152
+            },    # ~80 MB - 1-2 min/thread (mandel 95% reduction, md 67% reduction)
             'huge': {
-                'grid_size': 6144, 'iterations': 1200, 'array_size': 50000000, 'fft_size': 131072,
-                'md_particles': 24576, 'md_steps': 100, 'qsort_size': 50000, 'fft_size_kb': 128, 'lu_size': 1536
-            },  # ~400 MB - 40-60 min/thread (5x large)
+                'grid_size': 6144, 'iterations': 1200, 'array_size': 1000000, 'fft_size': 131072,
+                'md_particles': 6144, 'md_steps': 30, 'qsort_size': 75000, 'fft_size_kb': 256, 'lu_size': 2304
+            },  # ~400 MB - 2-5 min/thread (mandel 98% reduction, md 75% reduction)
             'extreme': {
-                'grid_size': 10240, 'iterations': 2000, 'array_size': 100000000, 'fft_size': 262144,
-                'md_particles': 40960, 'md_steps': 200, 'qsort_size': 100000, 'fft_size_kb': 256, 'lu_size': 2560
-            } # ~1 GB - 2-3 horas/thread (2x huge)
+                'grid_size': 15360, 'iterations': 3000, 'array_size': 2000000, 'fft_size': 524288,
+                'md_particles': 10240, 'md_steps': 50, 'qsort_size': 300000, 'fft_size_kb': 1024, 'lu_size': 5760
+            } # ~1 GB - 5-10 min/thread (mandel 98% reduction, md 75% reduction, pi/fft/qsort/lu/jacobi increased 2x)
         }
         
         # Results storage
@@ -614,12 +615,13 @@ class BenchmarkRunner:
             'c_fft6': {
                 'binary': 'bin/c_fft6.par.gnu',
                 'args_template': {
-                    
-                    'small': ['-test'],
-                    'medium': ['-test'],
-                    'large': ['-test'],
-                    'huge': ['-test'],
-                    'extreme': ['-test'],
+                    # c_fft6 expects: N (signal size, power of 2) and ITERS
+                    # Converting KB to N: 16KB = 16*1024 = 16384 = 2^14
+                    'small': ['16384', '1'],     # 16KB
+                    'medium': ['32768', '1'],    # 32KB
+                    'large': ['65536', '1'],     # 64KB
+                    'huge': ['262144', '1'],     # 256KB
+                    'extreme': ['1048576', '1'], # 1MB
                     
                     
                     

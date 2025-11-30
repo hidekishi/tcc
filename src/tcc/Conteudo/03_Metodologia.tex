@@ -1,0 +1,504 @@
+\chapter{Metodologia}
+
+A metodologia deste trabalho foi planejada afim de desenvolver um modelo para análise da eficiência e da escalabilidade de algoritmos paralelos de forma genérica. As etapas que serão apresentadas a seguir foram estruturadas afim de definir como os experimentos serão conduzidos.
+
+A pesquisa está organizada em quatro etapas principais:
+
+\begin{enumerate}
+    \item Seleção e análise dos algoritmos e frameworks de benchmarking paralelos;
+    \item Execução com variação no número de processadores, dimensão das entradas dos problemas e granularidade;
+    \item Coleta e análise das métricas de desempenho e overhead;
+    \item Desenvolvimento de um modelo de escalabilidade comparativo;
+    \item Estruturação do texto explicando o processo, resultados e conclusões.
+\end{enumerate}
+
+\section{Seleção dos Algoritmos}
+
+Depois de análise e pesquisa de diferentes frameworks e algoritmos de \textit{benchmarking}, optou-se por utilizar a biblioteca de algoritmos conhecida como OpenMP Source Code Repository (OmpSCR) \cite{dorta2005} devido à sua simplicidade e praticidade de utilização. Esse repositório conta com diversas aplicações nas linguagens C, C++ e Fortran. Foram selecionadas apenas as aplicações em linguagem C para os estudos realizados. Dentre essas aplicações, foram ignoradas algumas apontadas pelos desenvolvedores como "soluções ruins", afinal, elas não apresentariam resultados consistentes para análise. As aplicações selecionadas para análise assim como suas descrições são apresentados a seguir.
+
+\begin{table}[H]
+\centering
+\caption{Aplicações OpenMP testadas}
+\label{tab:aplicacoes-testadas}
+\begin{tabular}{ll}
+\toprule
+\textbf{Aplicação} & \textbf{Descrição} \\
+\midrule
+c\_mandel & Mandelbrot Set (conjunto fractal) \\
+c\_md & Molecular Dynamics (dinâmica molecular) \\
+c\_pi & Cálculo de Pi (integração numérica - padrão) \\
+c\_fft & Fast Fourier Transform (radix-2) \\
+c\_qsort & QuickSort (ordenação recursiva) \\
+c\_lu & LU Decomposition (decomposição de matriz) \\
+c\_jacobi01 & Jacobi (barreira global) \\
+c\_jacobi02 & Jacobi (sincronização parcial) \\
+c\_jacobi03 & Jacobi (pipeline) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Cálculo de Pi - Integração Numérica}
+
+Integração numérica da função $f(x) = \frac{4}{1+x^2}$ no intervalo $[0,1]$ usando a regra do retângulo.
+
+\textbf{Paralelização OpenMP:}
+\begin{lstlisting}[language=C]
+#pragma omp parallel for default(shared) private(i, local) reduction(+:pi)
+for(i = 0; i < N; i++) {
+    local = (i + 0.5) * w;
+    pi += 4.0 / (1.0 + local * local);
+}
+\end{lstlisting}
+
+A diretiva \texttt{parallel for} distribui as iterações entre threads com scheduling \texttt{static} (padrão), adequado para este workload perfeitamente balanceado. A cláusula \texttt{reduction(+:pi)} realiza a soma final automaticamente. Não há dependências entre iterações e o acesso à memória é sequencial (cache-friendly).
+
+%-------------------------------------------------------------------
+
+\subsection{Mandelbrot Set - Monte Carlo Sampling}
+
+Amostragem Monte Carlo para estimar área do conjunto de Mandelbrot. Cada ponto é testado pela iteração $z_{n+1} = z_n^2 + c$ até escapar ($|z| > 2$) ou atingir MAXITER iterações.
+
+\textbf{Paralelização OpenMP:}
+\begin{lstlisting}[language=C]
+#pragma omp parallel for default(none) reduction(+:outside) \
+                         private(i, j, ztemp, z) shared(NPOINTS, points)
+for(i = 0; i < NPOINTS; i++) {
+    for (j = 0; j < MAXITER; j++) {
+        // Iteracao z = z^2 + c
+        ztemp = (z.re * z.re) - (z.im * z.im) + points[i].re;
+        z.im = z.re * z.im * 2 + points[i].im;
+        z.re = ztemp;
+        if (z.re * z.re + z.im * z.im > THRESHOLD) {
+            outside++; break;
+        }
+    }
+}
+\end{lstlisting}
+
+Problema embaraçosamente paralelo com pontos independentes, mas workload irregular (cada ponto diverge em número diferente de iterações). O loop interno tem dependência temporal ($z_{n+1}$ depende de $z_n$) e não pode ser paralelizado. A versão standard usa scheduling \texttt{static} pois com muitos pontos (2M+) o desbalanceamento se ameniza estatisticamente.
+
+%-------------------------------------------------------------------
+
+\subsection{QuickSort - Ordenação Paralela}
+
+Algoritmo divide-and-conquer recursivo com paralelização baseada em tasks.
+
+\textbf{Paralelização OpenMP:}
+\begin{lstlisting}[language=C]
+void quicksort_tasks(int *v, int left, int right, int cutoff) {
+    if (left < right) {
+        int pivot_index = partition(v, left, right);
+        #pragma omp task shared(v) if(right - left > cutoff)
+        quicksort_tasks(v, left, pivot_index - 1, cutoff);
+        #pragma omp task shared(v) if(right - left > cutoff)
+        quicksort_tasks(v, pivot_index + 1, right, cutoff);
+        #pragma omp taskwait
+    }
+}
+\end{lstlisting}
+
+Utiliza \texttt{\#pragma omp task} para recursão paralela nas duas partições. A cláusula \texttt{if(right - left > cutoff)} aplica threshold (~10.000 elementos na versão standard) para evitar overhead em partições pequenas. O \texttt{taskwait} sincroniza antes de retornar. Load balancing gerenciado por work-stealing queue do runtime OpenMP.
+
+%-------------------------------------------------------------------
+
+\subsection{FFT - Fast Fourier Transform}
+
+Algoritmo Cooley-Tukey recursivo (Radix-2) com complexidade $O(N \log N)$. Divide em pares/ímpares, aplica FFT recursiva e combina com twiddle factors.
+
+\textbf{Paralelização OpenMP (3 níveis):}
+\begin{lstlisting}[language=C]
+// 1. Split: separar pares e impares
+#pragma omp parallel for
+for (int i = 0; i < N/2; i++) {
+    even[i] = x[2*i]; odd[i] = x[2*i + 1];
+}
+
+// 2. Conquer: FFT recursiva paralela
+#pragma omp task shared(even)
+fft_parallel(even, N/2, cutoff);
+#pragma omp task shared(odd)
+fft_parallel(odd, N/2, cutoff);
+#pragma omp taskwait
+
+// 3. Combine: aplicar twiddle factors
+#pragma omp parallel for
+for (int k = 0; k < N/2; k++) {
+    complex t = twiddle[k] * odd[k];
+    x[k] = even[k] + t; x[k + N/2] = even[k] - t;
+}
+\end{lstlisting}
+
+Paralelização em três níveis: split (\texttt{parallel for} para separar pares/ímpares), conquer (tasks paralelas para recursões) e combine (\texttt{parallel for} para twiddle factors). Versão standard usa cutoff de 4096 pontos. As recursões são independentes, sem dependências de dados.
+
+%-------------------------------------------------------------------
+
+\subsection{Jacobi Iterative Solver - Três Variações}
+
+Solver iterativo para equações diferenciais parciais usando stencil 5-pontos. Cada ponto é atualizado pela média dos 4 vizinhos. Três variações foram implementadas para demonstrar diferentes estratégias de sincronização.
+
+\subsubsection{c\_jacobi01 - Barreira Global}
+
+\textbf{Paralelização OpenMP:}
+\begin{lstlisting}[language=C]
+for (iter = 0; iter < max_iter; iter++) {
+    #pragma omp parallel for private(i, j) shared(u, u_old, m, n)
+    for (i = 1; i < m-1; i++) {
+        for (j = 1; j < n-1; j++) {
+            u[i][j] = 0.25 * (u_old[i-1][j] + u_old[i+1][j] +
+                              u_old[i][j-1] + u_old[i][j+1]);
+        }
+    }
+    #pragma omp barrier  // Sincronizacao completa
+    #pragma omp parallel for
+    for (i = 0; i < m; i++)
+        memcpy(u_old[i], u[i], n * sizeof(double));
+}
+\end{lstlisting}
+
+Utiliza barreira global após cada iteração, garantindo sincronização completa. Overhead moderado mas sem race conditions. Workload perfeitamente uniforme.
+
+\subsubsection{c\_jacobi02 - Sincronização Parcial}
+
+\textbf{Paralelização OpenMP:}
+\begin{lstlisting}[language=C]
+#pragma omp parallel
+{
+    for (iter = 0; iter < max_iter; iter++) {
+        #pragma omp for nowait private(i, j)
+        for (i = 1; i < m-1; i++) {
+            for (j = 1; j < n-1; j++) {
+                u[i][j] = 0.25 * (u_old[i-1][j] + u_old[i+1][j] +
+                                  u_old[i][j-1] + u_old[i][j+1]);
+            }
+        }
+        // Sincronizacao apenas quando necessario
+        #pragma omp for
+        for (i = 0; i < m; i++)
+            swap_rows(u[i], u_old[i]);
+    }
+}
+\end{lstlisting}
+
+Reduz overhead usando \texttt{nowait} e sincronização apenas quando necessário. Complexidade maior mas melhor performance.
+
+\subsubsection{c\_jacobi03 - Pipeline}
+
+\textbf{Paralelização OpenMP:}
+\begin{lstlisting}[language=C]
+#pragma omp parallel
+{
+    int tid = omp_get_thread_num();
+    int start = tid * chunk_size;
+    int end = (tid + 1) * chunk_size;
+    
+    for (iter = 0; iter < max_iter; iter++) {
+        // Pipeline: cada thread trabalha em sua regiao
+        for (i = start; i < end; i++) {
+            for (j = 1; j < n-1; j++) {
+                u[i][j] = 0.25 * (u_old[i-1][j] + u_old[i+1][j] +
+                                  u_old[i][j-1] + u_old[i][j+1]);
+            }
+        }
+        #pragma omp barrier  // Sincronizacao minima
+        swap_buffers(start, end);
+    }
+}
+\end{lstlisting}
+
+Processamento em pipeline com sincronização mínima. Overhead minimizado mas pode requerer mais iterações até convergência.
+
+%-------------------------------------------------------------------
+
+\subsection{LU Decomposition}
+
+Decomposição de matriz $A = L \times U$ (Lower $\times$ Upper triangular) usando algoritmo de Doolittle. Complexidade $O(N^3)$.
+
+\textbf{Paralelização OpenMP:}
+\begin{lstlisting}[language=C]
+for (k = 0; k < N; k++) {
+    // Linha k de U (paralelizavel)
+    #pragma omp parallel for private(j, s) shared(U, L, A, k, N)
+    for (j = k; j < N; j++) {
+        U[k][j] = A[k][j];
+        for (s = 0; s < k; s++)
+            U[k][j] -= L[k][s] * U[s][j];
+    }
+    
+    // Coluna k de L (paralelizavel apos linha k)
+    #pragma omp parallel for private(i, s) shared(U, L, A, k, N)
+    for (i = k+1; i < N; i++) {
+        L[i][k] = A[i][k];
+        for (s = 0; s < k; s++)
+            L[i][k] -= L[i][s] * U[s][k];
+        L[i][k] /= U[k][k];
+    }
+}
+\end{lstlisting}
+
+Dependência por nível: cada iteração k deve completar antes de k+1 (loop externo serial). Dentro de cada nível, linhas de U e colunas de L são independentes e paralelizáveis. Barrier implícita garante sincronização entre as regiões paralelas. Speedup limitado pela Lei de Amdahl devido à serialização do loop externo.
+
+%-------------------------------------------------------------------
+
+\subsection{Molecular Dynamics - N-body Simulation}
+
+Simulação N-body com forças de Lennard-Jones ($F = 24\epsilon[(2(\sigma/r)^{13} - (\sigma/r)^7)]$). Complexidade $O(N^2)$ para cálculo de forças.
+
+\textbf{Paralelização OpenMP:}
+\begin{lstlisting}[language=C]
+for (step = 0; step < n_steps; step++) {
+    // Calcular forcas entre pares
+    #pragma omp parallel for private(i, j, r, dist, f_mag, f) \
+                             schedule(dynamic, 64)
+    for (i = 0; i < n_particles; i++) {
+        force[i] = {0, 0, 0};
+        for (j = i+1; j < n_particles; j++) {
+            // Calculo Lennard-Jones e acumulo atomico
+            #pragma omp atomic
+            force[i].x += f.x;
+            #pragma omp atomic
+            force[j].x -= f.x;  // F_ij = -F_ji
+        }
+    }
+    
+    // Integracao Verlet
+    #pragma omp parallel for
+    for (i = 0; i < n_particles; i++) {
+        vel[i] += force[i] / mass[i] * dt;
+        pos[i] += vel[i] * dt;
+    }
+}
+\end{lstlisting}
+
+Cálculo de forças $O(N^2)$ entre todos os pares. Race condition (pela Lei de Newton $F_{ij} = -F_{ji}$) resolvida com operações \texttt{atomic}. Acesso à memória irregular causa cache misses frequentes. Versão standard usa \texttt{schedule(dynamic, 64)} para balancear workload desbalanceado.
+
+%-------------------------------------------------------------------
+
+\section{Ferramentas}
+
+Os experimentos serão executados em uma workstation HP Z2 com as seguintes especificações:
+
+\begin{itemize}
+    \item Processador: Intel Core i9-14900K, 24 núcleos - 8 de performance (P) e 16 de eficiência (E) - 24 threads, frequência base de 3,2 GHz, turbo de até 6,0 GHz;
+    \item Cache L3 de 36 MB compartilhada por todos os núcleos e caches L2 e L1 tendo 2 MB e 80 KB respectivamente para os núcleos P. Nos núcleos E, memória L2 de 4 MB para cada \textit{cluster} de 4 núcleos e L1 de 96 KB por núcleo.
+    \item Memória RAM: 128 GB DDR5;
+    \item Sistema Operacional: Linux Ubuntu 24.04.2 LTS 64-bits;
+\end{itemize}
+
+\section{Plano de Experimentos}
+
+\subsection{Número de Processadores}
+
+Cada aplicação foi executada em diferentes configurações de número de \textit{threads}: 1, 2, 4, 8, 12, 16 e 24. Os testes foram feitos com o \textit{Hyper-Threading} da Intel desativado afim de manter os testes mais consistentes utilizando apenas os núcleos físicos, por isso apenas 24 \textit{threads} ao invés das potenciais 32.
+
+\subsection{Dimensão do Problema}
+
+As dimensões de entrada foram definidas em cinco níveis progressivos (small, medium, large, huge e extreme). Esta progressão permitiu avaliar o potencial efeito de diferentes cargas computacionais no \textit{speedup} e eficiência, além do seu potencial de escalabilidade.
+
+Os parâmetros foram ajustados conforme as características de cada algoritmo, sobretudo sua complexidade, que define o aumento no número de operações e, consequentemente, a carga computacional. Por exemplo, FFT mantém dimensões em potências de 2 (necessário para a implementação radix-2), Molecular Dynamics escalona em menor grau devido à complexidade O(N²) da aplicação, e LU Decomposition limita-se ainda mais pelo custo cúbico O(N³). A Tabela~\ref{tab:dimensoes} detalha os parâmetros específicos utilizados para cada aplicação.
+
+\begin{table}[H]
+\centering
+\caption{Parâmetros de dimensão por aplicação}
+\label{tab:dimensoes}
+\footnotesize
+\begin{tabular}{lp{2.5cm}p{2.5cm}p{2.5cm}p{2.5cm}p{2.5cm}}
+\toprule
+\textbf{App} & \textbf{small} & \textbf{medium} & \textbf{large} & \textbf{huge} & \textbf{extreme} \\
+\midrule
+c\_pi & 200M iter. & 800M iter. & 3.2B iter. & 12.8B iter. & 51.2B iter. \\
+c\_mandel & 200k pts & 800k pts & 3.2M pts & 12.8M pts & 51.2M pts \\
+c\_qsort & 2M elem. & 8M elem. & 32M elem. & 128M elem. & 512M elem. \\
+c\_fft & 2048 pts & 4096 pts & 8192 pts & 16384 pts & 32768 pts \\
+c\_fft6 & 2048 pts & 4096 pts & 8192 pts & 16384 pts & 32768 pts \\
+c\_md & 1024 part. & 2048 part. & 4096 part. & 8192 part. & 16384 part. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Essa variação permitirá analisar como a dimensão do problema afeta nas métricas coletadas como previsto por \citeonline{gustafson1988}.
+
+\subsection{Granularidade}
+\label{sec:granularidade-experimentos}
+
+Para cada uma das aplicações do benchmark, foram desenvolvidas duas variantes derivadas da versão \textit{standard}: \textit{fine-grained} (grão fino) e \textit{coarse-grained} (grão grosso). As adaptações foram implementadas através de duas estratégias principais: (1) modificação da cláusula \texttt{schedule()} nas diretivas \texttt{parallel for} do OpenMP, e (2) ajuste dos parâmetros de \textit{cutoff} em estruturas baseadas em \texttt{tasks}.
+
+A seguir, apresenta-se o exemplo da aplicação FFT, que ilustra ambas as estratégias de modificação. As demais aplicações seguiram abordagem similar, adaptada às suas características específicas.
+
+\subsubsection{Exemplo: FFT - Controle de Cutoff e Scheduling}
+
+A FFT implementa recursão paralela usando diretivas \texttt{parallel for}. A granularidade foi controlada através de duas modificações principais: o threshold de paralelização (cutoff) e a estratégia de scheduling na fase de combinação.
+
+\textbf{Versão Fine-Grained (cutoff = 64 elementos):}
+\begin{lstlisting}[language=C]
+#define FINE_CUTOFF 64  /* Paraleliza para N >= 64 */
+
+void FFT(Complex *A, Complex *a, Complex *W, unsigned N, 
+         unsigned stride, Complex *D) {
+    // ... codigo de caso base ...
+    
+    n = (N >> 1);
+    
+    /* Paraleliza recursao mesmo para N pequeno */
+    if (N >= FINE_CUTOFF) {
+        #pragma omp parallel for if(N >= FINE_CUTOFF)
+        for(i = 0; i <= 1; i++) {
+            FFT(D + i*n, a + i*stride, W, n, stride << 1, A + i*n);
+        }
+    } else {
+        /* Serial para N < 64 */
+        for(i = 0; i <= 1; i++) {
+            FFT(D + i*n, a + i*stride, W, n, stride << 1, A + i*n);
+        }
+    }
+    
+    /* Combinacao com scheduling dinamico e chunks pequenos */
+    #pragma omp parallel for schedule(dynamic, 8)
+    for(i = 0; i <= n - 1; i++) {
+        // ... calculo dos twiddle factors ...
+    }
+}
+\end{lstlisting}
+
+\textbf{Versão Coarse-Grained (cutoff = 4096 elementos):}
+\begin{lstlisting}[language=C]
+#define COARSE_CUTOFF 4096  /* Paraleliza apenas para N >= 4096 */
+
+void FFT(Complex *A, Complex *a, Complex *W, unsigned N, 
+         unsigned stride, Complex *D) {
+    // ... codigo de caso base ...
+    
+    n = (N >> 1);
+    
+    /* Paraleliza recursao apenas para N muito grande */
+    if (N >= COARSE_CUTOFF) {
+        #pragma omp parallel for
+        for(i = 0; i <= 1; i++) {
+            FFT(D + i*n, a + i*stride, W, n, stride << 1, A + i*n);
+        }
+    } else {
+        /* Serial para N < 4096 */
+        for(i = 0; i <= 1; i++) {
+            FFT(D + i*n, a + i*stride, W, n, stride << 1, A + i*n);
+        }
+    }
+    
+    /* Combinacao com scheduling estatico e chunks grandes */
+    int chunk_size = n / omp_get_max_threads();
+    #pragma omp parallel for schedule(static, chunk_size)
+    for(i = 0; i <= n - 1; i++) {
+        // ... calculo dos twiddle factors ...
+    }
+}
+\end{lstlisting}
+
+\textbf{Diferenças implementadas:}
+
+\begin{enumerate}
+    \item \textbf{Cutoff de recursão}: Fine-grained (64) vs. Coarse-grained (4096) — controla a profundidade da paralelização recursiva. Cutoff baixo gera mais tasks paralelas em níveis mais profundos da árvore de recursão, aumentando o paralelismo potencial mas também o overhead de criação de tasks. Cutoff alto limita a paralelização aos níveis superiores, reduzindo overhead mas podendo subutilizar threads.
+
+    \item \textbf{Estratégia de scheduling}: Fine-grained usa \texttt{schedule(dynamic, 8)} para distribuir iterações dinamicamente entre threads com chunks pequenos (8 elementos), permitindo melhor balanceamento quando há irregularidade. Coarse-grained usa \texttt{schedule(static, chunk\_size)} onde \texttt{chunk\_size = n/threads}, criando chunks grandes contíguos atribuídos estaticamente, minimizando overhead de scheduling mas podendo causar desbalanceamento.
+\end{enumerate}
+
+\subsubsection{Adaptações nas Demais Aplicações}
+
+As demais aplicações seguiram estratégia similar, adaptada às suas características:
+
+\begin{itemize}
+    \item \textbf{Pi e Mandelbrot}: Modificação apenas do scheduling — fine usa \texttt{schedule(dynamic, 1)} ou \texttt{schedule(dynamic, 10)}, coarse usa \texttt{schedule(static, N/(threads×4))}
+    
+    \item \textbf{QuickSort}: Controle de threshold de criação de tasks — fine usa \texttt{if(size > 1000)}, coarse usa \texttt{if(size > 100000)}
+    
+    \item \textbf{Jacobi e LU}: Ajuste de chunk size no scheduling — fine usa \texttt{schedule(dynamic, 4)} ou \texttt{schedule(dynamic, 2)}, coarse usa \texttt{schedule(static, calculated\_chunk)}
+    
+    \item \textbf{Molecular Dynamics}: Fine usa \texttt{schedule(dynamic, 8)} para compensar irregularidade no número de vizinhos, coarse usa \texttt{schedule(static)} assumindo uniformidade
+\end{itemize}
+
+Estas variações permitem avaliar empiricamente o trade-off entre overhead de coordenação (favorecido por coarse-grained) e balanceamento de carga (favorecido por fine-grained) sob diferentes padrões de workload.
+
+\section{Coleta e Processamento de Dados}
+
+Cada uma das combinações de configuração foram testadas 5 vezes para evitar imprevisibilidades e inconsistências do hardware. Dessas execuções, foram coletadas as médias aritméticas de tempo de execução e também os tempos máximos e mínimos.  Foi utilizado um script Python para o gerenciamento das execuções assim como a geração das tabelas com os resultados, que podem ser vistas integralmente no apêndice COLOCAR APENDICE AQUI.
+
+Após a execução e coleta de dados, eles foram processados inicialmente utilizando outros scripts Python para conseguir as métricas de \textit{speedup} e eficiência.
+
+\subsection{Cálculo do Overhead}
+
+Como é difícil precisar o valor exato do overhead nas aplicações, foram utilizadas algumas fórmulas para estimar esse impacto em cada execução. As fórmulas utilizadas, que serão apresentadas a seguir, foram aplicadas posteriormente à
+
+\begin{enumerate}
+    \item \textbf{Overhead total:} a partir da diferença entre o tempo ideal e o tempo real de execução paralela. Será utilizado:
+    \begin{equation}
+    \label{eq-overheadtotal}
+        T_o = p \cdot T_p- T_1
+    \end{equation}
+    em que $O$ é o overhead absoluto, $T_1$ é o tempo sequencial, $T_p$ é o tempo paralelo e $p$ o número de processadores.
+
+    \item \textbf{Overhead relativo:} medido em relação ao tempo sequencial:
+    \begin{equation}
+        \phi = \frac{T_o}{T_1}
+    \end{equation}
+
+    \item \textbf{Fração serial aparente (Karp–Flatt):} para estimar a fração de código que não escala, considerando tanto parte sequencial quanto overhead:
+    \begin{equation}
+        \epsilon = \frac{\frac{1}{T_1} - \frac{1}{p}}{1 - \frac{1}{p}}
+    \end{equation}
+
+\end{enumerate}
+
+\subsection{Monitoramento de CPU}
+
+Por se tratar de um processador de arquitetura híbrida e por não terem sido feitas alterações nem com relação ao escalonador padrão do Linux, nem nos núcleos, o comportamento da CPU foi monitorado paralelamente às execuções por meio do software \textbf{btop}.
+
+Após observações, foi notado que os núcleos de processamento foram alocados para serviço em ordem numérica, ou seja, as execuções começaram utilizando somente o núcleo 0, depois 0 e 1, então 0, 1, 2 e 3 e assim por diante. Tendo em vista que os núcleos de 0 a 7 na máquina de testes são os núcleos de performance, conforme apontado utilizando o comando \textbf{lscpu} do Linux, que permitiu visualizar as configurações de cada processador e chegar nessa conclusão.
+
+Foi possível observar por meio do \textbf{btop} que os núcleos de performance estavam recebendo maior carga de trabalho quando utilizados em conjunto com os núcleos de eficiência, que corresponde com
+
+\section{Modelo de Escalabilidade}
+
+As principais métricas utilizadas para análise de desempenho e escalabilidade em algoritmos que serão seguidas para os experimentos da pesquisa são:
+
+\begin{itemize}
+\item{
+\textbf{Tempo de execução paralela}
+\begin{equation}
+T_p=\frac{T_1+T_o}{p}
+\end{equation}
+}
+
+\item{
+\textit{\textbf{Speedup}}, ou ganho obtido pela execução paralela em relação à execução sequencial \eqref{eq-speedup}.
+
+\item{
+\textbf{Eficiência} paralela, que normaliza o \textit{speedup} pelo número de processadores $p$ \eqref{eq-eficiencia}
+}
+
+\item{
+Para o \textit{\textbf{overhead}}, será utilizada a métrica de overhead total já apresentada anteriormente. \eqref{eq-overheadtotal}
+}
+\end{itemize}
+
+Além dessas métricas clássicas, propõe-se uma fórmula própria de escalabilidade composta, que integra a eficiência e o \textit{overhead} relativo em um único índice indicado por $Es$:
+
+\[
+Es = E \cdot \left( 1 - \frac{\phi}{\max(\phi_{geral})} \right)
+\]
+
+Esse \textit{score} composto assume valores entre 0 e 1, onde valores mais altos indicam um melhor equilíbrio entre a utilização efetiva dos processadores e a minimização dos custos adicionais de paralelização.
+
+Todos os dados serão processados em gráficos que mostrarão a tendência dos algoritmos com base nas diferentes configurações testadas.
+
+Serão utilizadas interpolações para transformar os dados em funções polinomiais que podem ajudar a prever o grau de escalabilidade do algoritmo. Assim sendo, funções que se aproximarem mais da linear representariam maior escalabilidade.
+
+Dados de complexidade assintótica e polinômios representativos dos algoritmos também serão extraídos para análise juntamente aos dados empíricos.
+
+\section{Análise Comparativa}
+
+A análise final será dedicada à comparação entre os algoritmos, com base nos seguintes aspectos:
+
+\begin{itemize}
+    \item Limite prático de escalabilidade observado;
+    \item Principais gargalos;
+    \item Diferença de desempenho entre granularidade fina e grossa;
+    \item Análise de padrões entre os algoritmos com seus respectivos comportamentos quanto à escalabilidade e demais métricas;
+    \item Relação entre custo de recursos adicionais e ganho de desempenho;
+\end{itemize}

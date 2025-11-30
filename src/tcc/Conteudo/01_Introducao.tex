@@ -1,0 +1,39 @@
+
+\chapter{Introdução}
+
+A computação tem desempenhado um papel decisivo no avanço de diferentes áreas do conhecimento, viabilizando a solução de problemas que antes eram impraticáveis. Questões que envolvem simulações científicas, análise de grandes volumes de dados, inteligência artificial e aplicações em tempo real demandam elevado poder de processamento, o que impulsiona o desenvolvimento de novas tecnologias e estratégias para melhor aproveitar os recursos computacionais \cite{hennessypatterson2017}.
+
+Tradicionalmente, o aumento do desempenho esteve associado à evolução do hardware, em especial à elevação da frequência dos processadores. Entretanto, o custo energético para esse aumento e, sobretudo, sua eficiência colocaram a progressão desse atributo em cheque, conforme apontado por \cite{hennessypatterson2017}, comparando o consumo de cerca de 2 watts dos processadores de 32 bits com os 95 watts do Intel Core i7-6700K. O mesmo estudo também deixa evidente uma clara diminuição na evolução da frequência do \textit{clock} dos processadores. Tais tendências levaram à disseminação de arquiteturas paralelas e multicore como alternativas. Nesse contexto, a computação paralela tornou-se uma abordagem essencial, permitindo que múltiplos núcleos trabalhem de forma simultânea na execução de partes de um mesmo problema.
+
+O paralelismo, apesar de ter se tornado um padrão da indústria, apresenta problemas e limitações. Fatores como a comunicação entre os processos simultâneos, balanceamento de carga de trabalho por processador, latência e memória são alguns dos limitadores presentes. Um outro fator primordial foi abordado pela Lei de Amdahl, que discute um limite para o chamado \textit{speedup}, métrica determinada pela razão do tempo de execução serial pelo tempo de execução paralelo \cite{amdahl1967}. Amdahl apresenta que a parte serial do código limita o ganho de desempenho representado pelo \textit{speedup}. Sendo assim, a métrica conhecida como eficiência, determinada pela razão do \textit{speedup} pelo número de processadores, também tende a decair com a progressão deste. Dessa forma, mesmo com aumento no número de processadores, o desempenho pode estagnar ou até decair por conta dessa limitação.
+
+\citeonline{gustafson1988} apresentou posteriormente uma visão divergente à de Amdahl ao afirmar que a dimensão do problema pode interferir no desempenho e, portanto, deve ser levada em consideração na avaliação da efetividade da solução paralela. Ele afirma que a influência da parte serial se tornaria menos significativa e que os ganhos de paralelismo poderiam ser mais bem aproveitados nesses casos. Esse raciocínio abriu caminho para o estudo da escalabilidade de sistemas paralelos, conceito essencial para determinar a relação custo-benefício, já que a expansão de recursos computacionais nem sempre representará um ganho considerável ou compensatório.
+
+Complementar aos conceitos já citados, sobretudo às ideias de Gustafson, outra forma de análise de escalabilidade é a isoeficiência. Essa métrica determina a proporção em que o tamanho do problema deve aumentar em relação ao número de processadores para que a eficiência permaneça constante. Quanto menor o valor da isoeficiência, mais escalável é o sistema, pois isso significa que pequenos aumentos no tamanho do problema justificam uma maior alocação de recursos computacionais \cite{grama1993isoefficiency}.
+
+Fatores relativos aos algoritmos em si, como granularidade (Seção ~\ref{sec-granularidade}) e \textit{overhead} (Seção ~\ref{sec-overhead},) podem ter grande influência nas métricas e, consequentemente, na escalabilidade dos algoritmos, como será apresentado futuramente. Complementar à parte empírica das aplicações, o estudo teórico delas, como a análise assintótica e de polinômios de complexidade, pode servir como base para analisar de forma matemática a progressão desses algoritmos. \cite{cormen2009introduction}
+
+Diante do apresentado, este trabalho tem como objetivo investigar o uso das métricas de speedup e eficiência, complexidade e parâmetros formais para analisar o desempenho e a escalabilidade de algoritmos clássicos utilizados em \emph{benchmark}\footnote{“Benchmark” é algo que serve como padrão pelo qual outros podem ser medidos ou avaliados \cite{merriam2025benchmark}.}. Pretende-se, assim, avaliar como diferentes características dos algoritmos afetam essas métricas e em que medida a alocação de recursos pode ser otimizada. A análise busca não apenas identificar gargalos de desempenho, mas também apontar cenários em que a expansão de hardware não se traduz em melhorias significativas, oferecendo uma visão mais clara sobre o custo-benefício das soluções paralelas.
+
+Ao final, espera-se contribuir para a compreensão prática da escalabilidade em computação paralela, oferecendo subsídios para decisões mais conscientes quanto ao uso de recursos computacionais em diferentes contextos.
+
+\section{Objetivos}
+
+\subsection{Geral}
+
+Desenvolver, a partir do estudo de métricas de avaliação de algoritmos paralelos, como speedup e eficiência, granularidade e outros parâmetros algorítmicos, um modelo que misture aspectos teóricos e práticos, permitindo compreender a escalabilidade de aplicações em diferentes cenários a fim de maximizar a eficiência utilizando algoritmos voltados ao benchmarking em ambientes paralelos como base de estudo.
+
+\subsection{Específicos}
+
+\begin{itemize}
+    \item Estudar e compreender os algoritmos presentes em frameworks de benchmarking paralelos, utilizando a API OpenMP em linguagem C;
+
+    \item Realizar experimentos variando o número de processadores, dimensões do problema e granularidade;
+
+    \item Coletar os tempos de execução e calcular as métricas de speedup, eficiência e também overhead;
+
+    \item Compreender e comparar os impactos das métricas e informações coletadas e, com base nisso, desenvolver um modelo para determinar genericamente o grau de escalabilidade de algoritmos;
+
+    \item Comparar o desempenho entre diferentes algoritmos de benchmarking, identificando padrões de comportamento e gargalos de execução.
+
+\end{itemize}
