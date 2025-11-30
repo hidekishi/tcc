@@ -92,6 +92,79 @@ class GistUploader:
         except Exception as e:
             print(f"❌ Error uploading to Gist: {e}")
             return None
+import threading
+from collections import defaultdict
+import multiprocessing
+import requests
+
+class GistUploader:
+    """Handle GitHub Gist uploads for benchmark results"""
+    
+    def __init__(self):
+        self.github_token = None
+        self.public = False
+        self.description = "OmpSCR Benchmark Results"
+        self.enabled = False
+    
+    def configure(self, github_token, public=False, description=None):
+        """Configure GitHub Gist uploader"""
+        self.github_token = github_token
+        self.public = public
+        if description:
+            self.description = description
+        self.enabled = True
+    
+    def upload_results(self, csv_file, json_file, summary_file):
+        """Upload benchmark results to GitHub Gist"""
+        if not self.enabled or not self.github_token:
+            return None
+        
+        try:
+            # Read file contents
+            files = {}
+            
+            # Add CSV
+            with open(csv_file, 'r') as f:
+                files[csv_file.name] = {"content": f.read()}
+            
+            # Add JSON
+            with open(json_file, 'r') as f:
+                files[json_file.name] = {"content": f.read()}
+            
+            # Add summary
+            with open(summary_file, 'r') as f:
+                files[summary_file.name] = {"content": f.read()}
+            
+            # Create gist
+            gist_data = {
+                "description": self.description,
+                "public": self.public,
+                "files": files
+            }
+            
+            headers = {
+                "Authorization": f"token {self.github_token}",
+                "Accept": "application/vnd.github.v3+json"
+            }
+            
+            response = requests.post(
+                "https://api.github.com/gists",
+                headers=headers,
+                json=gist_data,
+                timeout=30
+            )
+            
+            if response.status_code == 201:
+                gist_url = response.json()["html_url"]
+                return gist_url
+            else:
+                print(f"⚠️  Failed to create Gist: {response.status_code}")
+                print(f"    {response.text}")
+                return None
+                
+        except Exception as e:
+            print(f"❌ Error uploading to Gist: {e}")
+            return None
 
 class EmailNotifier:
     """Handle email notifications for benchmark results"""
@@ -429,7 +502,9 @@ class BenchmarkRunner:
         self.output_dir.mkdir(exist_ok=True)
         
         # Initialize email notifier, gist uploader and analyzer
+        # Initialize email notifier, gist uploader and analyzer
         self.email_notifier = EmailNotifier()
+        self.gist_uploader = GistUploader()
         self.gist_uploader = GistUploader()
         self.analyzer = BenchmarkAnalyzer()
         
@@ -455,7 +530,23 @@ class BenchmarkRunner:
                 print("⚠️  psutil not installed. Install with: pip install psutil")
                 print("    CPU load distribution monitoring will be limited.")
         
+        # CPU monitoring
+        self.cpu_monitor_active = False
+        self.cpu_monitor_thread = None
+        self.cpu_usage_data = []
+        self.psutil_available = False
+        
+        # Check if psutil is available for detailed CPU monitoring
+        try:
+            import psutil
+            self.psutil_available = True
+        except ImportError:
+            if show_cpu_usage:
+                print("⚠️  psutil not installed. Install with: pip install psutil")
+                print("    CPU load distribution monitoring will be limited.")
+        
         # Problem sizes: 5 níveis otimizados para análise de escalabilidade
+        # Progressão mais acentuada: cada nível ~8-10x maior que o anterior
         # Progressão mais acentuada: cada nível ~8-10x maior que o anterior
         # Foco em completar full-test em tempo razoável (~6-8 horas)
         self.problem_sizes = {
@@ -1136,6 +1227,106 @@ class BenchmarkRunner:
         
         return '\n'.join(report)
     
+    def start_cpu_monitoring(self, interval=0.1):
+        """Start monitoring CPU load distribution per core"""
+        if not self.psutil_available:
+            return
+        
+        import psutil
+        
+        self.cpu_monitor_active = True
+        self.cpu_usage_data = []
+        
+        def monitor_cpu():
+            while self.cpu_monitor_active:
+                try:
+                    # Get per-CPU usage
+                    per_cpu = psutil.cpu_percent(interval=interval, percpu=True)
+                    
+                    # Get overall CPU usage
+                    overall = psutil.cpu_percent(interval=0)
+                    
+                    sample = {
+                        'timestamp': time.time(),
+                        'per_cpu': per_cpu,
+                        'overall': overall,
+                        'cpu_count': len(per_cpu)
+                    }
+                    
+                    self.cpu_usage_data.append(sample)
+                    
+                except Exception as e:
+                    print(f"⚠️  CPU monitoring error: {e}")
+                    break
+        
+        self.cpu_monitor_thread = threading.Thread(target=monitor_cpu, daemon=True)
+        self.cpu_monitor_thread.start()
+    
+    def stop_cpu_monitoring(self):
+        """Stop CPU monitoring and return summary"""
+        if not self.psutil_available or not self.cpu_monitor_active:
+            return None
+        
+        self.cpu_monitor_active = False
+        
+        if self.cpu_monitor_thread:
+            self.cpu_monitor_thread.join(timeout=1.0)
+        
+        if not self.cpu_usage_data:
+            return None
+        
+        # Calculate statistics
+        cpu_count = self.cpu_usage_data[0]['cpu_count']
+        
+        # Per-CPU statistics
+        per_cpu_stats = {}
+        for cpu_id in range(cpu_count):
+            cpu_values = [sample['per_cpu'][cpu_id] for sample in self.cpu_usage_data if cpu_id < len(sample['per_cpu'])]
+            if cpu_values:
+                per_cpu_stats[cpu_id] = {
+                    'avg': sum(cpu_values) / len(cpu_values),
+                    'min': min(cpu_values),
+                    'max': max(cpu_values),
+                    'samples': len(cpu_values)
+                }
+        
+        # Overall statistics
+        overall_values = [sample['overall'] for sample in self.cpu_usage_data]
+        overall_stats = {
+            'avg': sum(overall_values) / len(overall_values),
+            'min': min(overall_values),
+            'max': max(overall_values)
+        }
+        
+        return {
+            'per_cpu': per_cpu_stats,
+            'overall': overall_stats,
+            'duration': self.cpu_usage_data[-1]['timestamp'] - self.cpu_usage_data[0]['timestamp'],
+            'samples': len(self.cpu_usage_data)
+        }
+    
+    def format_cpu_load_report(self, cpu_stats):
+        """Format CPU load statistics for display"""
+        if not cpu_stats:
+            return "No CPU monitoring data available"
+        
+        report = []
+        report.append("\n📊 CPU LOAD DISTRIBUTION:")
+        report.append(f"   Duration: {cpu_stats['duration']:.2f}s ({cpu_stats['samples']} samples)")
+        report.append(f"   Overall CPU: {cpu_stats['overall']['avg']:.1f}% avg (min={cpu_stats['overall']['min']:.1f}%, max={cpu_stats['overall']['max']:.1f}%)")
+        report.append("\n   Per-Core Usage:")
+        
+        # Group cores by usage level for better visualization
+        per_cpu = cpu_stats['per_cpu']
+        sorted_cpus = sorted(per_cpu.items(), key=lambda x: x[1]['avg'], reverse=True)
+        
+        for cpu_id, stats in sorted_cpus:
+            bar_length = int(stats['avg'] / 5)  # Scale to 20 chars max (100% / 5)
+            bar = '█' * bar_length
+            report.append(f"   CPU {cpu_id:2d}: {bar:20s} {stats['avg']:5.1f}% (min={stats['min']:5.1f}%, max={stats['max']:5.1f}%)")
+        
+        return '\n'.join(report)
+    
     def get_cpu_affinity_info(self, thread_count):
         """Get CPU core mapping information for the specified thread count"""
         try:
@@ -1277,7 +1468,12 @@ class BenchmarkRunner:
         if self.show_cpu_usage and self.psutil_available:
             self.start_cpu_monitoring(interval=0.1)
         
+        # Start CPU monitoring if enabled
+        if self.show_cpu_usage and self.psutil_available:
+            self.start_cpu_monitoring(interval=0.1)
+        
         try:
+            # Run the benchmark (use current directory, not hardcoded path)
             # Run the benchmark (use current directory, not hardcoded path)
             result = subprocess.run(
                 [f"./{binary}"] + args,
@@ -1286,10 +1482,17 @@ class BenchmarkRunner:
                 timeout=1800,  # 30 minute timeout for extreme problems
                 env=env,
                 cwd=os.getcwd()
+                env=env,
+                cwd=os.getcwd()
             )
             
             end_time = time.time()
             wall_time = end_time - start_time
+            
+            # Stop CPU monitoring and get statistics
+            cpu_load_stats = None
+            if self.show_cpu_usage and self.psutil_available:
+                cpu_load_stats = self.stop_cpu_monitoring()
             
             # Stop CPU monitoring and get statistics
             cpu_load_stats = None
@@ -1317,10 +1520,20 @@ class BenchmarkRunner:
                 'cpu_affinity': cpu_info if self.show_cpu_usage else None,
                 'cpu_usage': cpu_usage,
                 'cpu_load_distribution': cpu_load_stats,
+                'cpu_load_distribution': cpu_load_stats,
                 **timing_info
             }
             
             if result.returncode == 0:
+                # Display results with CPU load info
+                if self.show_cpu_usage and cpu_load_stats:
+                    # Count active cores (>5% avg usage)
+                    active_cores = sum(1 for stats in cpu_load_stats['per_cpu'].values() if stats['avg'] > 5.0)
+                    print(f"    ✓ Completed in {wall_time:.3f}s - CPU: {cpu_load_stats['overall']['avg']:.1f}% avg, {active_cores} active cores")
+                    
+                    # Display detailed CPU load report
+                    print(self.format_cpu_load_report(cpu_load_stats))
+                elif self.show_cpu_usage and cpu_usage:
                 # Display results with CPU load info
                 if self.show_cpu_usage and cpu_load_stats:
                     # Count active cores (>5% avg usage)
@@ -1347,6 +1560,10 @@ class BenchmarkRunner:
             if self.show_cpu_usage and self.psutil_available:
                 self.stop_cpu_monitoring()
             
+            # Stop monitoring if active
+            if self.show_cpu_usage and self.psutil_available:
+                self.stop_cpu_monitoring()
+            
             print(f"    ⏱️  Timeout after 30 minutes")
             self.completed_runs += 1
             self.update_progress()
@@ -1366,6 +1583,10 @@ class BenchmarkRunner:
             }
             
         except Exception as e:
+            # Stop monitoring if active
+            if self.show_cpu_usage and self.psutil_available:
+                self.stop_cpu_monitoring()
+            
             # Stop monitoring if active
             if self.show_cpu_usage and self.psutil_available:
                 self.stop_cpu_monitoring()
@@ -1725,11 +1946,24 @@ class BenchmarkRunner:
             else:
                 print(f"❌ Failed to upload to Gist")
         
+        # Upload to GitHub Gist if configured
+        gist_url = None
+        if self.gist_uploader.enabled:
+            print(f"\n📤 Uploading results to GitHub Gist...")
+            gist_url = self.gist_uploader.upload_results(csv_file, json_file, summary_file)
+            if gist_url:
+                print(f"✅ Results uploaded to Gist!")
+                print(f"🔗 URL: {gist_url}")
+            else:
+                print(f"❌ Failed to upload to Gist")
+        
         return {
             'csv': csv_file,
             'json': json_file, 
             'summary': summary_file,
             'analysis': analysis_result,
+            'integrity': integrity_file,
+            'gist_url': gist_url
             'integrity': integrity_file,
             'gist_url': gist_url
         }
@@ -1916,6 +2150,14 @@ def main():
                         help='GitHub personal access token for Gist upload')
     parser.add_argument('--gist-public', action='store_true',
                         help='Make the Gist public (default: secret/private)')
+    parser.add_argument('--upload-gist', action='store_true',
+                        help='Upload results to GitHub Gist after completion')
+    parser.add_argument('--gist-config', type=str,
+                        help='GitHub Gist configuration file (JSON format with github_token, public, description)')
+    parser.add_argument('--gist-token', type=str,
+                        help='GitHub personal access token for Gist upload')
+    parser.add_argument('--gist-public', action='store_true',
+                        help='Make the Gist public (default: secret/private)')
     
     args = parser.parse_args()
     
@@ -1929,9 +2171,11 @@ def main():
     # Configure integrity checking if requested
     if args.check_integrity:
         print(f"Integrity checking enabled - variance threshold: {args.integrity_threshold}")
+        print(f"Integrity checking enabled - variance threshold: {args.integrity_threshold}")
     
     # Configure CPU usage monitoring if requested
     if args.show_cpu_usage:
+        print(f"CPU usage monitoring enabled")
         print(f"CPU usage monitoring enabled")
     
     # Configure email notifications if requested
@@ -1976,6 +2220,45 @@ def main():
             print("⚠️  Email notification requested but not properly configured!")
             print("   Use --email-config file.json or --email-sender + --email-recipients")
             print("   Continuing without email notifications...")
+    
+    # Configure GitHub Gist upload if requested
+    if args.upload_gist:
+        gist_configured = False
+        
+        # Try to load from config file first
+        if args.gist_config:
+            try:
+                with open(args.gist_config) as f:
+                    gist_config = json.load(f)
+                
+                runner.gist_uploader.configure(
+                    github_token=gist_config['github_token'],
+                    public=gist_config.get('public', False),
+                    description=gist_config.get('description', 'OmpSCR Benchmark Results')
+                )
+                gist_configured = True
+                visibility = "public" if gist_config.get('public', False) else "secret"
+                print(f"📤 GitHub Gist upload enabled ({visibility}) from config: {args.gist_config}")
+                
+            except Exception as e:
+                print(f"❌ Failed to load Gist config: {e}")
+        
+        # Try command line arguments
+        elif args.gist_token:
+            runner.gist_uploader.configure(
+                github_token=args.gist_token,
+                public=args.gist_public,
+                description='OmpSCR Benchmark Results'
+            )
+            gist_configured = True
+            visibility = "public" if args.gist_public else "secret"
+            print(f"📤 GitHub Gist upload enabled ({visibility})")
+        
+        if not gist_configured:
+            print("⚠️  Gist upload requested but not properly configured!")
+            print("   Use --gist-config file.json or --gist-token YOUR_TOKEN")
+            print("   Generate token at: https://github.com/settings/tokens")
+            print("   Continuing without Gist upload...")
     
     # Configure GitHub Gist upload if requested
     if args.upload_gist:
