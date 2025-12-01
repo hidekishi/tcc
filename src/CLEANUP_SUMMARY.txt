@@ -1,0 +1,67 @@
+﻿PROJECT CLEANUP SUMMARY
+=======================
+Date: 2025-12-01 00:00:26
+
+SCRIPTS CONSOLIDATION
+---------------------
+
+BEFORE: 18 Python scripts
+AFTER:  3 Python scripts (83% reduction)
+
+REMOVED SCRIPTS (17):
+- generate_analysis.py (46 KB)
+- generate_all_graphs.py (19 KB)
+- generate_additional_graphs.py (14 KB)
+- generate_polynomial_fit_graphs.py (17 KB)
+- generate_graphs.py (14 KB)
+- generate_plots.py (20 KB)
+- generate_latex_tables.py (12 KB)
+- generate_full_results_table.py (5 KB)
+- generate_overhead_table.py (3 KB)
+- generate_scalability_scores.py (5 KB)
+- analyze_dimension_impact.py (4 KB)
+- analyze_results.py (5 KB)
+- update_tex_results.py (9 KB)
+- fix_underscores.py (1 KB)
+- restore_underscores.py (1 KB)
+- validate_graphs.py (1 KB)
+- list_apps.py (0.3 KB)
+
+REMOVED FILES (3):
+- metodologia_dimensoes.txt
+- metodologia_granularidade.txt
+- README_OLD.md (1.4 MB)
+
+REMAINING SCRIPTS (3):
+ benchmark_runner.py (108 KB) - Main benchmark execution engine
+ analyze_and_visualize.py (16 KB) - Consolidated analysis & visualization
+ utils.py (5 KB) - Shared utility functions
+
+TOTAL SPACE SAVED: ~180 KB + 1.4 MB documentation
+
+BENEFITS
+--------
+ Simplified project structure (3 scripts vs 18)
+ Single entry point for analysis and visualization
+ Shared utility functions (DRY principle)
+ Updated documentation (README.md)
+ Easier maintenance and updates
+ Reduced dependencies and complexity
+
+FUNCTIONALITY PRESERVED
+-----------------------
+ All graph generation capabilities
+ All table generation capabilities
+ Speedup, efficiency, overhead analysis
+ Polynomial fit analysis
+ Comparison graphs
+ LaTeX table generation
+ Statistical metrics calculation
+
+NEW FEATURES
+------------
+ Command-line options for selective generation
+ Application filtering (--apps)
+ Separate graph/table generation (--graphs-only, --tables-only)
+ Unified metrics calculation
+ Consistent output formatting
